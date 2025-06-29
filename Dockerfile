@@ -173,12 +173,27 @@ CMD ["--help"]
 # Stage 3: Development stage (for development work)
 FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as development
 
-# Install development tools
+# Install development tools and libraries
 RUN apt-get update && apt-get install -y \
+    # Build tools
+    build-essential \
+    cmake \
+    ninja-build \
+    ccache \
+    pkg-config \
+    # Development libraries
+    libyaml-cpp-dev \
+    libopencv-dev \
+    libgtest-dev \
+    libgmock-dev \
+    libbenchmark-dev \
     # Development tools
     gdb \
     valgrind \
     perf-tools-unstable \
+    # Analysis tools
+    clang-tidy \
+    cppcheck \
     # Editors
     vim \
     nano \
@@ -190,7 +205,24 @@ RUN apt-get update && apt-get install -y \
     # Networking tools
     net-tools \
     iputils-ping \
+    # Utilities
+    wget \
+    curl \
+    htop \
+    tree \
+    # Video processing
+    ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Setup ccache for faster builds
+ENV PATH="/usr/lib/ccache:${PATH}"
+ENV CCACHE_DIR="/tmp/ccache"
+ENV CCACHE_MAXSIZE="2G"
+RUN mkdir -p ${CCACHE_DIR}
 
 # Set work directory
 WORKDIR /workspace/urology-inference

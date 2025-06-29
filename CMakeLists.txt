@@ -46,12 +46,34 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/version.hpp.in
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 
+# Add OpenCV include directories
+if(OpenCV_INCLUDE_DIRS)
+    include_directories(${OpenCV_INCLUDE_DIRS})
+endif()
+
 # Find Qt6 (optional for GUI)
 find_package(Qt6 COMPONENTS Core Widgets QUIET)
 
 # OpenCV for image processing
-find_package(OpenCV REQUIRED)
 find_package(PkgConfig REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs highgui dnn)
+
+# If OpenCV is not found via config, try pkg-config
+if(NOT OpenCV_FOUND)
+    pkg_check_modules(OpenCV REQUIRED opencv4)
+    if(NOT OpenCV_FOUND)
+        pkg_check_modules(OpenCV REQUIRED opencv)
+    endif()
+endif()
+
+# Set OpenCV variables for compatibility
+if(OpenCV_FOUND AND NOT OpenCV_LIBS)
+    set(OpenCV_LIBS ${OpenCV_LIBRARIES})
+endif()
+
+message(STATUS "Found OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenCV libraries: ${OpenCV_LIBS}")
+message(STATUS "OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
 
 # Sources - Core Application
 set(CORE_SOURCE_FILES
