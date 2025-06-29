@@ -207,8 +207,16 @@ ENV ENABLE_TESTING=ON
 ENV ENABLE_BENCHMARKS=ON
 ENV ENABLE_STATIC_ANALYSIS=ON
 
-# Create development user
-RUN groupadd -r developer && useradd -r -g developer -u 1000 -s /bin/bash developer && \
+# Create development user (check if exists first)
+RUN if ! getent group developer > /dev/null 2>&1; then groupadd -r developer; fi && \
+    if ! getent passwd developer > /dev/null 2>&1; then \
+        # Find available UID starting from 1000
+        for uid in $(seq 1000 1100); do \
+            if ! getent passwd $uid > /dev/null 2>&1; then \
+                useradd -r -g developer -u $uid -s /bin/bash -m developer && break; \
+            fi; \
+        done; \
+    fi && \
     chown -R developer:developer /workspace
 
 USER developer
