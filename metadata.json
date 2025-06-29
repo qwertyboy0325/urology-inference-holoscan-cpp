@@ -1,0 +1,72 @@
+{
+  "application": {
+    "name": "Urology Inference Holoscan C++",
+    "authors": [
+      {
+        "name": "Ezra",
+        "affiliation": "SST"
+      },
+      {
+        "name": "Eason", 
+        "affiliation": "SST"
+      }
+    ],
+    "language": "C++",
+    "version": "1.0",
+    "changelog": {
+      "1.0": "Initial C++ implementation - Ported from Python version with performance optimizations"
+    },
+    "holoscan_sdk": {
+      "minimum_required_version": "2.1.0",
+      "tested_versions": [
+        "2.3.0"
+      ]
+    },
+    "platforms": [
+      "amd64",
+      "arm64"
+    ],
+    "tags": [
+      "Urology",
+      "Segmentation", 
+      "YOLO",
+      "C++",
+      "TensorRT",
+      "Medical Imaging",
+      "Real-time"
+    ],
+    "ranking": 1,
+    "dependencies": {
+      "system": [
+        "CUDA Toolkit >= 11.8",
+        "TensorRT >= 8.5",
+        "OpenCV >= 4.5",
+        "yaml-cpp >= 0.6"
+      ],
+      "optional": [
+        "Qt6 (for GUI support)"
+      ]
+    },
+    "build": {
+      "type": "cmake",
+      "minimum_cmake_version": "3.20",
+      "build_script": "scripts/build.sh",
+      "run_script": "scripts/run.sh"
+    },
+    "run": {
+      "command": "./urology_inference_holoscan_cpp --data <holohub_data_dir>/urology-inference-holoscan-cpp",
+      "workdir": "build",
+      "environment": {
+        "HOLOHUB_DATA_PATH": "<holohub_data_dir>/urology-inference-holoscan-cpp",
+        "HOLOSCAN_LOG_LEVEL": "INFO"
+      }
+    },
+    "performance": {
+      "gpu_memory_required": "4GB",
+      "inference_backend": "TensorRT",
+      "precision": "FP16",
+      "throughput": "30+ FPS @ 1920x1080"
+    },
+    "description": "High-performance C++ implementation of real-time urology medical image segmentation using NVIDIA Holoscan SDK and YOLO-based deep learning models. Provides GPU-accelerated inference pipeline for anatomical structure detection and segmentation in urological procedures."
+  }
+} 

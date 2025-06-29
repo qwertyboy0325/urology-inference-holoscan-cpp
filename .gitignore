@@ -1,0 +1,55 @@
+# Build directories
+build/
+bin/
+lib/
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Object files
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+
+# Executables
+urology_inference_holoscan_cpp
+urology_inference_holoscan_cpp_qt
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data directories
+data/models/*.onnx
+data/models/*.engine
+data/inputs/*
+data/output/*
+!data/*/README.md
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+
+# Core dumps
+core.* 
