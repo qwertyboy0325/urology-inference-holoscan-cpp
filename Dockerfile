@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y \
 ENV PATH="/usr/lib/ccache:${PATH}"
 ENV CCACHE_DIR="/tmp/ccache"
 ENV CCACHE_MAXSIZE="2G"
-RUN mkdir -p ${CCACHE_DIR}
+RUN mkdir -p ${CCACHE_DIR} && chmod 777 ${CCACHE_DIR}
 
 # Set work directory
 WORKDIR /workspace/urology-inference
@@ -218,12 +218,6 @@ RUN apt-get update && apt-get install -y \
     libswscale-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup ccache for faster builds
-ENV PATH="/usr/lib/ccache:${PATH}"
-ENV CCACHE_DIR="/tmp/ccache"
-ENV CCACHE_MAXSIZE="2G"
-RUN mkdir -p ${CCACHE_DIR}
-
 # Set work directory
 WORKDIR /workspace/urology-inference
 
@@ -250,6 +244,12 @@ RUN if ! getent group developer > /dev/null 2>&1; then groupadd -r developer; fi
         done; \
     fi && \
     chown -R developer:developer /workspace
+
+# Setup ccache for developer user
+ENV PATH="/usr/lib/ccache:${PATH}"
+ENV CCACHE_DIR="/home/developer/.ccache"
+ENV CCACHE_MAXSIZE="2G"
+RUN mkdir -p ${CCACHE_DIR} && chown -R developer:developer ${CCACHE_DIR}
 
 USER developer
 
