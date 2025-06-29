@@ -1,0 +1,98 @@
+# Docker ignore file for urology-inference-holoscan-cpp
+
+# Build artifacts
+build/
+build-*/
+*.o
+*.so
+*.a
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+CPackConfig.cmake
+install_manifest.txt
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# Documentation
+*.md
+docs/
+*.pdf
+*.txt
+LICENSE*
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Test data (unless needed)
+data/inputs/
+data/output/
+test_data/
+examples/
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+ci/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Archive files
+*.tar.gz
+*.zip
+*.rar
+*.7z
+
+# Large model files (add specific paths if needed)
+# models/*.onnx
+# models/*.tensorrt
+
+# Keep only necessary directories
+!src/
+!include/
+!CMakeLists.txt
+!scripts/build*.sh
+!scripts/run.sh
+!metadata.json 

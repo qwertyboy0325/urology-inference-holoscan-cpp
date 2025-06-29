@@ -42,10 +42,30 @@ This application performs real-time YOLO-based segmentation on urology medical i
 
 ## Installation
 
-### 1. Install Holoscan SDK
+### Option 1: Docker (推薦)
+
+使用基於 NVIDIA Holoscan SDK 3.3.0 的 Docker 容器，無需手動安裝依賴：
+
+```bash
+# 快速開始 - 使用 Docker Compose
+docker-compose up urology-inference
+
+# 或者使用構建腳本
+./scripts/docker-build.sh --runtime --release
+docker run --gpus all urology-inference:runtime-latest --help
+
+# 開發模式
+docker-compose --profile development up urology-inference-dev
+```
+
+詳細的 Docker 使用說明請參閱 [DOCKER_README.md](./DOCKER_README.md)
+
+### Option 2: 本地安裝
+
+#### 1. Install Holoscan SDK
 Follow the [official Holoscan installation guide](https://docs.nvidia.com/holoscan/sdk-user-guide/installation.html).
 
-### 2. Install Dependencies
+#### 2. Install Dependencies
 ```bash
 sudo apt update
 sudo apt install -y \
@@ -57,7 +77,7 @@ sudo apt install -y \
     pkg-config
 ```
 
-### 3. Build the Application
+#### 3. Build the Application
 ```bash
 cd urology-inference-holoscan-cpp
 mkdir build && cd build
@@ -67,7 +87,31 @@ make -j$(nproc)
 
 ## Usage
 
-### Basic Usage
+### Docker 使用方式 (推薦)
+
+```bash
+# 基本運行
+docker run --gpus all urology-inference:runtime --help
+
+# 使用自定義數據
+docker run --gpus all \
+  -v $(pwd)/data:/app/data:ro \
+  -v $(pwd)/models:/app/models:ro \
+  urology-inference:runtime \
+  --source replayer --record_output true
+
+# 運行測試
+docker run --gpus all urology-inference:runtime test
+
+# 性能基準測試
+docker run --gpus all urology-inference:runtime benchmark
+
+# 進入開發模式
+docker-compose --profile development run --rm urology-inference-dev
+```
+
+### 本地使用方式
+
 ```bash
 ./urology_inference_holoscan_cpp -d /path/to/data
 ```

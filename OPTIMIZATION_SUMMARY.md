@@ -355,6 +355,153 @@ cd build && ./urology_inference_holoscan_cpp --monitor-performance
 3. 定期性能基準測試
 4. 監控系統資源使用
 
+## 🐳 Docker 容器化支持 (新增)
+
+### Docker 多階段構建架構
+基於 NVIDIA Holoscan SDK 3.3.0 官方鏡像，提供三個構建階段：
+
+**1. Builder Stage (構建階段)**
+```dockerfile
+FROM nvcr.io/nvidia/holoscan:3.3.0-devel as builder
+```
+- 完整的開發工具鏈
+- ccache 構建加速
+- 自動依賴檢查和安裝
+
+**2. Runtime Stage (運行時階段)**
+```dockerfile
+FROM nvcr.io/nvidia/holoscan:3.3.0-runtime as runtime
+```
+- 最小化的生產環境 (~2-3GB)
+- 只包含運行時必需的庫
+- 非 root 用戶安全配置
+
+**3. Development Stage (開發階段)**
+```dockerfile
+FROM nvcr.io/nvidia/holoscan:3.3.0-devel as development
+```
+- 完整開發環境 (~5-6GB)
+- 調試工具 (gdb, valgrind)
+- 源代碼卷掛載支持
+
+### Docker Compose 服務配置
+
+**生產服務 (`urology-inference`)**
+- GPU 資源管理和限制
+- 健康檢查和自動重啟
+- 持久化卷掛載
+- 安全配置 (非特權模式)
+
+**開發服務 (`urology-inference-dev`)**
+- 交互式開發環境
+- 源代碼實時編輯
+- 調試工具支持
+- 構建緩存優化
+
+**測試和基準測試服務**
+- 自動化測試執行
+- 性能基準測試
+- 結果數據持久化
+
+### 便利工具和腳本
+
+**1. 智能構建腳本**
+```bash
+# scripts/docker-build.sh
+./scripts/docker-build.sh --runtime --release    # 生產鏡像
+./scripts/docker-build.sh --development --debug  # 開發鏡像
+./scripts/docker-build.sh --all --tag v1.0.0     # 所有鏡像
+```
+
+**2. 容器入口管理**
+```bash
+# scripts/docker-entrypoint.sh
+docker run --gpus all urology-inference:runtime help        # 幫助信息
+docker run --gpus all urology-inference:runtime env         # 環境檢查
+docker run --gpus all urology-inference:runtime test        # 運行測試
+docker run --gpus all urology-inference:runtime benchmark   # 性能測試
+docker run --gpus all urology-inference:runtime verify-deps # 驗證依賴
+```
+
+**3. 依賴管理和驗證**
+```bash
+# scripts/install_video_encoder_deps.sh - 安裝視頻編碼器依賴
+./scripts/install_video_encoder_deps.sh
+
+# scripts/verify_video_encoder_deps.sh - 獨立驗證腳本
+./scripts/verify_video_encoder_deps.sh --verbose
+./scripts/verify_video_encoder_deps.sh --libs-dir /custom/path
+```
+
+**4. 快速開始工具**
+```bash
+# docker-quick-start.sh - 交互式菜單
+./docker-quick-start.sh
+```
+
+### 部署和運維優勢
+
+**環境一致性**
+- 消除"在我機器上可以運行"問題
+- 統一的依賴和環境配置
+- 跨平台部署支持
+
+**快速部署**
+- 一鍵運行: `docker-compose up`
+- 預構建鏡像可直接部署
+- 支持 CI/CD 流水線集成
+
+**資源管理**
+- GPU 資源智能分配
+- 內存和 CPU 限制
+- 存儲卷管理
+
+**安全性**
+- 非 root 用戶運行
+- 只讀根文件系統
+- 網絡隔離和安全組
+
+**監控和日誌**
+- 健康檢查機制 (包含依賴驗證)
+- 結構化日誌輸出
+- 性能指標收集
+
+**依賴管理**
+- 自動化 GXF 多媒體擴展安裝
+- 構建時依賴驗證
+- 運行時依賴檢查
+- 詳細的故障排除信息
+
+### Docker 使用示例
+
+**快速體驗**
+```bash
+# 克隆項目
+git clone <repository>
+cd urology-inference-holoscan-cpp
+
+# 一鍵運行
+docker-compose up urology-inference
+```
+
+**開發工作流**
+```bash
+# 進入開發環境
+docker-compose --profile development up urology-inference-dev
+
+# 在容器內開發
+./scripts/build_optimized.sh --debug --enable-testing
+```
+
+**生產部署**
+```bash
+# 構建生產鏡像
+./scripts/docker-build.sh --runtime --release
+
+# 運行生產服務
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+```
+
 ## 🎯 結論
 
 通過這次全面的優化，Urology Inference Holoscan C++ 項目在以下方面得到了顯著改進:
@@ -364,8 +511,14 @@ cd build && ./urology_inference_holoscan_cpp --monitor-performance
 3. **可靠性**: 強化的錯誤處理和測試覆蓋
 4. **開發體驗**: 更好的工具鏈和調試能力
 5. **可監控性**: 全面的性能監控和分析
+6. **容器化支持**: 完整的 Docker 部署解決方案
 
-這些改進為項目的長期維護和擴展提供了堅實的基礎，同時提高了開發效率和系統穩定性。
+這些改進為項目的長期維護和擴展提供了堅實的基礎，同時提高了開發效率和系統穩定性。Docker 容器化支持特別為項目帶來了：
+
+- **部署簡化**: 從複雜的環境配置到一鍵部署
+- **環境統一**: 開發、測試、生產環境完全一致
+- **擴展性**: 支持雲原生部署和 Kubernetes 編排
+- **維護效率**: 簡化的運維和故障排除流程
 
 ---
 
