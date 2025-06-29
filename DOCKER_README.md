@@ -70,7 +70,7 @@ docker run --gpus all -it urology-inference:runtime --help
 
 ### Runtime Stage (生產環境)
 ```dockerfile
-FROM nvcr.io/nvidia/holoscan:3.3.0-runtime
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu
 ```
 - 最小化的運行時環境
 - 只包含必要的運行時依賴
@@ -79,7 +79,7 @@ FROM nvcr.io/nvidia/holoscan:3.3.0-runtime
 
 ### Development Stage (開發環境)
 ```dockerfile
-FROM nvcr.io/nvidia/holoscan:3.3.0-devel
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu
 ```
 - 完整的開發工具鏈
 - 包含調試工具和分析器

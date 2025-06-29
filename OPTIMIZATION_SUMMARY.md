@@ -362,7 +362,7 @@ cd build && ./urology_inference_holoscan_cpp --monitor-performance
 
 **1. Builder Stage (構建階段)**
 ```dockerfile
-FROM nvcr.io/nvidia/holoscan:3.3.0-devel as builder
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as builder
 ```
 - 完整的開發工具鏈
 - ccache 構建加速
@@ -370,7 +370,7 @@ FROM nvcr.io/nvidia/holoscan:3.3.0-devel as builder
 
 **2. Runtime Stage (運行時階段)**
 ```dockerfile
-FROM nvcr.io/nvidia/holoscan:3.3.0-runtime as runtime
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as runtime
 ```
 - 最小化的生產環境 (~2-3GB)
 - 只包含運行時必需的庫
@@ -378,7 +378,7 @@ FROM nvcr.io/nvidia/holoscan:3.3.0-runtime as runtime
 
 **3. Development Stage (開發階段)**
 ```dockerfile
-FROM nvcr.io/nvidia/holoscan:3.3.0-devel as development
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as development
 ```
 - 完整開發環境 (~5-6GB)
 - 調試工具 (gdb, valgrind)

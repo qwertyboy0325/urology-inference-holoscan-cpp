@@ -2,7 +2,7 @@
 # Based on NVIDIA Holoscan SDK 3.3.0
 
 # Stage 1: Build stage
-FROM nvcr.io/nvidia/holoscan:3.3.0-devel as builder
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as builder
 
 LABEL maintainer="Urology Inference Team"
 LABEL description="Urology Inference application based on Holoscan SDK 3.3.0"
@@ -94,7 +94,7 @@ RUN if [ ! -f build/unit_tests ]; then \
     fi
 
 # Stage 2: Runtime stage
-FROM nvcr.io/nvidia/holoscan:3.3.0-runtime as runtime
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as runtime
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
@@ -171,7 +171,7 @@ ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["--help"]
 
 # Stage 3: Development stage (for development work)
-FROM nvcr.io/nvidia/holoscan:3.3.0-devel as development
+FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as development
 
 # Install development tools
 RUN apt-get update && apt-get install -y \
