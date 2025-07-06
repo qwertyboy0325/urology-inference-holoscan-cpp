@@ -224,11 +224,11 @@ void PerformanceMonitor::checkThresholds(const std::string& name, const Performa
     if (threshold_it != thresholds_.end()) {
         const auto& config = threshold_it->second;
         if (metrics.last_time_ms > config.critical_ms) {
-            LOG_ERROR("Performance critical threshold exceeded for '{}': {:.2f}ms > {:.2f}ms", 
-                     name, metrics.last_time_ms, config.critical_ms);
+            UROLOGY_LOG_ERROR("Performance critical threshold exceeded for '" + name + "': " + 
+                     std::to_string(metrics.last_time_ms) + "ms > " + std::to_string(config.critical_ms) + "ms");
         } else if (metrics.last_time_ms > config.warning_ms) {
-            LOG_WARN("Performance warning threshold exceeded for '{}': {:.2f}ms > {:.2f}ms", 
-                    name, metrics.last_time_ms, config.warning_ms);
+            UROLOGY_LOG_WARN("Performance warning threshold exceeded for '" + name + "': " + 
+                    std::to_string(metrics.last_time_ms) + "ms > " + std::to_string(config.warning_ms) + "ms");
         }
     }
     

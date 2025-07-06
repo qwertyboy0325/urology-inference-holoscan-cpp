@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <memory>
-#include <holoscan/core/tensor.hpp>
+#include <holoscan/core/domain/tensor.hpp>
 
 namespace urology {
 namespace yolo_utils {

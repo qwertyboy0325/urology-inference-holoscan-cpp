@@ -42,20 +42,19 @@ bool ErrorHandler::handleError(ErrorCode code, const std::string& message,
     
     // Log the error
     std::string full_context = context.empty() ? ErrorContext::getCurrentContext() : context;
-    LOG_ERROR("Error [{}]: {} (Context: {})", 
-             static_cast<int>(code), message, full_context);
+        UROLOGY_LOG_ERROR("Error [" + std::to_string(static_cast<int>(code)) + "]: " + message + " (Context: " + full_context + ")");
     
     // Try recovery if strategy is available
     auto recovery_it = recovery_strategies_.find(code);
     if (recovery_it != recovery_strategies_.end()) {
         auto& strategy = recovery_it->second;
         if (strategy->canRecover(code)) {
-            LOG_INFO("Attempting error recovery for code {}", static_cast<int>(code));
+            UROLOGY_LOG_INFO("Attempting error recovery for code " + std::to_string(static_cast<int>(code)));
             if (strategy->recover(code, full_context)) {
-                LOG_INFO("Error recovery successful for code {}", static_cast<int>(code));
+                UROLOGY_LOG_INFO("Error recovery successful for code " + std::to_string(static_cast<int>(code)));
                 return true;
             } else {
-                LOG_ERROR("Error recovery failed for code {}", static_cast<int>(code));
+                UROLOGY_LOG_ERROR("Error recovery failed for code " + std::to_string(static_cast<int>(code)));
             }
         }
     }
@@ -67,7 +66,7 @@ bool ErrorHandler::handleError(ErrorCode code, const std::string& message,
             try {
                 callback(code, message);
             } catch (const std::exception& e) {
-                LOG_ERROR("Error callback threw exception: {}", e.what());
+                UROLOGY_LOG_ERROR("Error callback threw exception: " + std::string(e.what()));
             }
         }
     }
@@ -136,19 +135,19 @@ bool GPUErrorRecoveryStrategy::canRecover(ErrorCode code) const {
 }
 
 bool GPUErrorRecoveryStrategy::recover(ErrorCode code, const std::string& context) {
-    LOG_INFO("Attempting GPU error recovery for context: {}", context);
+    UROLOGY_LOG_INFO("Attempting GPU error recovery for context: " + context);
     
     switch (code) {
         case ErrorCode::GPU_ERROR:
             // Try GPU reset or fallback to CPU
-            LOG_INFO("GPU error recovery: attempting device reset");
+            UROLOGY_LOG_INFO("GPU error recovery: attempting device reset");
             // In a real implementation, this would reset GPU context
             // or switch to CPU processing
             return true;
             
         case ErrorCode::MEMORY_ERROR:
             // Try to free GPU memory
-            LOG_INFO("Memory error recovery: attempting memory cleanup");
+            UROLOGY_LOG_INFO("Memory error recovery: attempting memory cleanup");
             // In a real implementation, this would trigger garbage collection
             // or release cached GPU memory
             return true;
@@ -168,7 +167,7 @@ bool FileIOErrorRecoveryStrategy::recover(ErrorCode code, const std::string& con
         return false;
     }
     
-    LOG_INFO("Attempting file I/O error recovery for context: {}", context);
+    UROLOGY_LOG_INFO("Attempting file I/O error recovery for context: " + context);
     
     // Try to create directory if it doesn't exist
     // Try alternative file locations
@@ -178,7 +177,7 @@ bool FileIOErrorRecoveryStrategy::recover(ErrorCode code, const std::string& con
     // For now, just simulate recovery attempt
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     
-    LOG_INFO("File I/O error recovery completed");
+    UROLOGY_LOG_INFO("File I/O error recovery completed");
     return true; // Simplified - assume recovery successful
 }
 

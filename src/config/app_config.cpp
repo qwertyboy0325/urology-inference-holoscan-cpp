@@ -12,7 +12,7 @@ struct AppConfig {
     std::string record_type = "none";
     bool record_output = true;
     std::string model_type = "yolo_seg_v9";
-    std::string model_name = "Urology_yolov11x-seg_3-13-16-17val640rezize_1_4.40.0_nms.onnx";
+    std::string model_name = "urology_yolov9c_3000random640resize_20240811_4.34_nhwc.onnx";
     
     struct {
         int width = 1920;

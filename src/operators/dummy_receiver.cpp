@@ -1,4 +1,4 @@
-#include <holoscan/holoscan.hpp>
+#include "holoscan_fix.hpp"
 
 namespace urology {
 
@@ -9,14 +9,14 @@ public:
     DummyReceiverOp() = default;
 
     void setup(holoscan::OperatorSpec& spec) override {
-        spec.input("in");
+        spec.input<holoscan::Tensor>("in");
     }
 
     void compute(holoscan::InputContext& op_input, 
                 holoscan::OutputContext& op_output,
                 holoscan::ExecutionContext& context) override {
         // Simply receive and discard the input
-        auto in_message = op_input.receive("in");
+        auto in_message = op_input.receive<holoscan::Tensor>("in");
         // Do nothing with the message
     }
 };

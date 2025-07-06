@@ -18,29 +18,30 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 DATA_DIR="$PROJECT_DIR/data"
 
-# Default parameters
-SOURCE_TYPE="replayer"
-DATA_PATH="$DATA_DIR"
-CONFIG_FILE="$PROJECT_DIR/src/config/app_config.yaml"
-LABELS_FILE="$PROJECT_DIR/src/config/labels.yaml"
-LOG_LEVEL="INFO"
+# Configuration
+DATA_PATH="${DATA_PATH:-./data}"
+SOURCE_TYPE="${SOURCE_TYPE:-replayer}"
+CONFIG_FILE="${CONFIG_FILE:-./src/config/app_config.yaml}"
+LABELS_FILE="${LABELS_FILE:-./data/config/surgical_tool_labels.yaml}"
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+HEADLESS_MODE="${HEADLESS_MODE:-false}"
 
-# Parse arguments
+# Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--data)
+        --data)
             DATA_PATH="$2"
             shift 2
             ;;
-        -s|--source)
+        --source)
             SOURCE_TYPE="$2"
             shift 2
             ;;
-        -c|--config)
+        --config)
             CONFIG_FILE="$2"
             shift 2
             ;;
-        -l|--labels)
+        --labels)
             LABELS_FILE="$2"
             shift 2
             ;;
@@ -48,32 +49,33 @@ while [[ $# -gt 0 ]]; do
             LOG_LEVEL="$2"
             shift 2
             ;;
-        --build)
-            echo -e "${YELLOW}Building first...${NC}"
-            "$SCRIPT_DIR/build.sh"
+        --headless)
+            HEADLESS_MODE="true"
             shift
             ;;
-        -h|--help)
-            echo "Usage: $0 [options]"
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -d, --data PATH       Data directory path (default: $DATA_DIR)"
-            echo "  -s, --source TYPE     Source type: replayer/yuan (default: replayer)"
-            echo "  -c, --config FILE     Configuration file (default: app_config.yaml)"
-            echo "  -l, --labels FILE     Labels file (default: labels.yaml)"
-            echo "  --log-level LEVEL     Log level: TRACE/DEBUG/INFO/WARN/ERROR (default: INFO)"
-            echo "  --build               Build before running"
-            echo "  -h, --help            Show this help"
+            echo "  --data PATH        Data directory path (default: ./data)"
+            echo "  --source TYPE      Source type: replayer|yuan (default: replayer)"
+            echo "  --config FILE      Configuration file path (default: ./src/config/app_config.yaml)"
+            echo "  --labels FILE      Labels file path (default: ./data/config/surgical_tool_labels.yaml)"
+            echo "  --log-level LEVEL  Log level: TRACE|DEBUG|INFO|WARN|ERROR|CRITICAL (default: INFO)"
+            echo "  --headless         Run without display window (headless mode)"
+            echo "  --help, -h         Show this help message"
             echo ""
-            echo "Examples:"
-            echo "  $0                                    # Run with defaults"
-            echo "  $0 -d /path/to/data -s yuan          # Use YUAN capture card"
-            echo "  $0 --build --log-level DEBUG         # Build and run with debug logs"
+            echo "Environment Variables:"
+            echo "  HOLOVIZ_HEADLESS   Set to any value to enable headless mode"
+            echo "  DATA_PATH          Override data directory path"
+            echo "  SOURCE_TYPE        Override source type"
+            echo "  LOG_LEVEL          Override log level"
+            echo ""
             exit 0
             ;;
         *)
-            echo -e "${RED}Unknown option: $1${NC}"
-            echo "Use -h or --help for usage information"
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
             exit 1
             ;;
     esac
@@ -117,6 +119,12 @@ fi
 # Set environment variables
 export HOLOHUB_DATA_PATH="$DATA_PATH"
 export HOLOSCAN_LOG_LEVEL="$LOG_LEVEL"
+
+# Set headless mode if requested
+if [ "$HEADLESS_MODE" = "true" ]; then
+    export HOLOVIZ_HEADLESS=1
+    echo -e "${YELLOW}Running in headless mode - no display window will be shown${NC}"
+fi
 
 # Display runtime information
 echo ""

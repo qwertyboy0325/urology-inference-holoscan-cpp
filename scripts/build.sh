@@ -57,29 +57,39 @@ echo "Project directory: $PROJECT_DIR"
 echo "Build directory: $BUILD_DIR"
 echo "Build type: $BUILD_TYPE"
 
+# Check if we're running in a container
+if [ -f /.dockerenv ]; then
+    echo -e "${GREEN}Running in Docker container${NC}"
+else
+    echo -e "${YELLOW}Not running in Docker container, attempting to run in Holoscan container...${NC}"
+    # Try to run the build script inside the Holoscan container
+    docker run --rm -it \
+        -v "$(pwd):/workspace" \
+        -w /workspace \
+        --runtime=nvidia \
+        --ipc=host \
+        --cap-add=CAP_SYS_PTRACE \
+        --ulimit memlock=-1 \
+        --ulimit stack=67108864 \
+        nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu \
+        /bin/bash -c "chmod +x /workspace/scripts/build.sh && /workspace/scripts/build.sh"
+    exit $?
+fi
+
 # Check if Holoscan SDK is available
-if ! pkg-config --exists holoscan; then
-    echo -e "${RED}Error: Holoscan SDK not found${NC}"
-    echo "Please install Holoscan SDK and ensure it's in your PKG_CONFIG_PATH"
+echo -e "${YELLOW}Checking Holoscan SDK...${NC}"
+if [ ! -d "/opt/nvidia/holoscan" ]; then
+    echo -e "${RED}Error: Holoscan SDK not found at /opt/nvidia/holoscan${NC}"
+    echo "Please ensure you are running in the Holoscan container"
     exit 1
 fi
+echo -e "${GREEN}✓ Holoscan SDK found at /opt/nvidia/holoscan${NC}"
 
 # Check for required dependencies
 echo -e "${YELLOW}Checking dependencies...${NC}"
 
-# Check for OpenCV
-if ! pkg-config --exists opencv4; then
-    echo -e "${RED}Error: OpenCV not found${NC}"
-    echo "Please install OpenCV development packages"
-    exit 1
-fi
-
-# Check for yaml-cpp
-if ! pkg-config --exists yaml-cpp; then
-    echo -e "${RED}Error: yaml-cpp not found${NC}"
-    echo "Please install yaml-cpp development packages"
-    exit 1
-fi
+# In Holoscan container, dependencies should already be installed
+echo -e "${GREEN}✓ Dependencies should be available in Holoscan container${NC}"
 
 # Check for video encoder GXF extensions
 echo -e "${YELLOW}Checking GXF video encoder extensions...${NC}"
@@ -115,6 +125,9 @@ fi
 # Create build directory
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
+
+# Set CMAKE_PREFIX_PATH for Holoscan
+export CMAKE_PREFIX_PATH="/opt/nvidia/holoscan${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 
 # Configure with CMake
 echo -e "${YELLOW}Configuring build...${NC}"

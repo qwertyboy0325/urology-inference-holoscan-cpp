@@ -1,3 +1,4 @@
+#include "holoscan_fix.hpp"
 #include "urology_app.hpp"
 #include "operators/yolo_seg_postprocessor.hpp"
 
@@ -14,29 +15,34 @@ UrologyApp::UrologyApp(const std::string& data_path,
                       const std::string& output_filename,
                       const std::string& labels_file)
     : data_path_(data_path), 
+      model_path_(""),
+      output_path_(""),
       output_filename_(output_filename),
       labels_file_(labels_file),
       is_recording_(true),
       source_type_(source),
       visualizer_type_("holoviz"),
-      record_output_(true),
+      model_name_("Urology_yolov11x-seg_3-13-16-17val640rezize_1_4.40.0_nms.onnx"),
       model_type_("yolo_seg_v9"),
-      model_name_("Urology_yolov11x-seg_3-13-16-17val640rezize_1_4.40.0_nms.onnx") {
+      record_output_(true) {
     
     // Set name
     name("Urology App");
     
-    // Set up paths
+    // Set up paths with new optimized structure
     if (data_path_ == "none") {
         const char* env_path = std::getenv("HOLOHUB_DATA_PATH");
         data_path_ = env_path ? env_path : "../data";
     }
     
+    // Use individual environment variables for each path type
     const char* model_env = std::getenv("HOLOSCAN_MODEL_PATH");
-    std::string model_base = model_env ? model_env : "../data/models";
+    const char* input_env = std::getenv("HOLOSCAN_INPUT_PATH");
+    const char* output_env = std::getenv("UROLOGY_OUTPUT_PATH");
     
-    model_path_ = std::filesystem::path(data_path_) / "models";
-    output_path_ = std::filesystem::path(data_path_) / "output";
+    model_path_ = model_env ? model_env : (std::filesystem::path(data_path_) / "models").string();
+    input_path_ = input_env ? input_env : (std::filesystem::path(data_path_) / "inputs").string();
+    output_path_ = output_env ? output_env : (std::filesystem::path(data_path_) / "output").string();
     
     // Create output directory if it doesn't exist
     std::filesystem::create_directories(output_path_);
@@ -46,10 +52,11 @@ UrologyApp::UrologyApp(const std::string& data_path,
     
     // Initialize memory pools
     host_memory_pool_ = std::make_shared<holoscan::BlockMemoryPool>(
-        "host_memory_pool", 1, 32 * 1024 * 1024, 2);
+        1, 32 * 1024 * 1024, 2, 1);
     device_memory_pool_ = std::make_shared<holoscan::BlockMemoryPool>(
-        "device_memory_pool", 1, 32 * 1024 * 1024, 2);
-    cuda_stream_pool_ = std::make_shared<holoscan::CudaStreamPool>("cuda_stream", 0, 0, 0, 1, 5);
+        1, 32 * 1024 * 1024, 2, 1);
+    cuda_stream_pool_ = std::make_shared<holoscan::CudaStreamPool>(
+        0, 0, 0, 1, 5);
 }
 
 void UrologyApp::load_labels() {
@@ -99,94 +106,173 @@ void UrologyApp::load_labels() {
 }
 
 void UrologyApp::compose() {
-    // Load required GXF extensions first
-    load_gxf_extensions();
+    // Initialize paths
+    if (data_path_ == "none") {
+        data_path_ = "./data";
+    }
     
-    // Get configuration parameters
-    source_type_ = from_config("source").value_or("replayer");
-    record_output_ = from_config("record_output").value_or(true);
+    model_path_ = data_path_ + "/models";
+    input_path_ = data_path_ + "/inputs";
+    output_path_ = data_path_ + "/output";
     
-    if (source_type_ == "yuan") {
-        // TODO: Implement YUAN capture card support
-        std::cerr << "YUAN capture card support not implemented yet" << std::endl;
-        throw std::runtime_error("YUAN capture card not supported");
-    } else {
-        // Use video stream replayer
-        std::string video_dir = std::filesystem::path(data_path_) / "inputs";
-        if (!std::filesystem::exists(video_dir)) {
-            throw std::runtime_error("Could not find video data: " + video_dir);
-        }
-        
-        replayer_ = make_operator<VideoStreamReplayerOp>(
+    // Load model configuration
+    model_name_ = "urology_yolov9c_3000random640resize_20240811_4.34_nhwc.onnx";
+    model_type_ = "onnx";
+    
+    // Initialize state
+    is_recording_ = false;
+    record_output_ = false; // Disable recording for now
+    source_type_ = "replayer";
+    
+    std::cout << "=== Urology Inference Application Setup ===" << std::endl;
+    std::cout << "Model path: " << model_path_ << std::endl;
+    std::cout << "Input path: " << input_path_ << std::endl;
+    std::cout << "Model file: " << model_name_ << std::endl;
+    
+    // Memory pools (increased size and blocks for inference)
+    host_memory_pool_ = make_resource<holoscan::BlockMemoryPool>(
+        "host_memory_pool", 
+        holoscan::Arg("storage_type", 0),
+        holoscan::Arg("block_size", 256UL * 1024 * 1024),  // 256MB
+        holoscan::Arg("num_blocks", int64_t(8))
+    );
+    
+    device_memory_pool_ = make_resource<holoscan::BlockMemoryPool>(
+        "device_memory_pool", 
+        holoscan::Arg("storage_type", 1),
+        holoscan::Arg("block_size", 256UL * 1024 * 1024),  // 256MB
+        holoscan::Arg("num_blocks", int64_t(8))
+    );
+    
+    cuda_stream_pool_ = make_resource<holoscan::CudaStreamPool>(
+        "cuda_stream_pool",
+        holoscan::Arg("stream_flags", int64_t(0)),
+        holoscan::Arg("stream_priority", int64_t(0)),
+        holoscan::Arg("reserved_size", int64_t(1)),
+        holoscan::Arg("max_size", int64_t(5))
+    );
+    
+    // Video replayer
+    std::filesystem::path video_dir = input_path_;
+    if (std::filesystem::exists(video_dir) && source_type_ == "replayer") {
+        std::cout << "Setting up video replayer from: \"" << video_dir << "\"" << std::endl;
+        replayer_ = make_operator<holoscan::ops::VideoStreamReplayerOp>(
             "replayer",
-            Arg("directory") = video_dir,
-            Arg("basename") = std::string("tensor"),
-            Arg("frame_rate") = 30.0f,
-            Arg("repeat") = false,
-            Arg("realtime") = false,
-            Arg("count") = 0
+            holoscan::Arg("directory", video_dir.string()),
+            holoscan::Arg("basename", std::string("tensor")),
+            holoscan::Arg("frame_rate", 30.0f),
+            holoscan::Arg("repeat", false),
+            holoscan::Arg("realtime", false),
+            holoscan::Arg("count", int64_t(0))
         );
     }
     
+    // Initialize pipeline state
+    pipeline_paused_ = false;
+    
     // Format converter for preprocessing
-    format_converter_ = make_operator<FormatConverterOp>(
+    format_converter_ = make_operator<holoscan::ops::FormatConverterOp>(
         "segmentation_preprocessor",
-        Arg("out_tensor_name") = std::string("seg_preprocessed"),
-        Arg("out_dtype") = std::string("float32"),
-        Arg("in_dtype") = std::string("rgb888"),
-        Arg("resize_width") = 640,
-        Arg("resize_height") = 640,
-        Arg("pool") = device_memory_pool_
+        holoscan::Arg("out_tensor_name", std::string("seg_preprocessed")),
+        holoscan::Arg("out_dtype", std::string("float32")),
+        holoscan::Arg("in_dtype", std::string("rgb888")),
+        holoscan::Arg("resize_width", 640),
+        holoscan::Arg("resize_height", 640),
+        holoscan::Arg("pool", device_memory_pool_)
     );
     
     // Inference operator
     std::string model_file = std::filesystem::path(model_path_) / model_name_;
-    inference_ = make_operator<InferenceOp>(
+    std::cout << "Model file path: " << model_file << std::endl;
+    
+    // Check if model file exists
+    if (!std::filesystem::exists(model_file)) {
+        throw std::runtime_error("Model file not found: " + model_file);
+    }
+    
+    // Create DataMap for model paths
+    holoscan::ops::InferenceOp::DataMap model_path_map;
+    model_path_map.insert("seg", model_file);
+    
+    // Create DataVecMap for preprocessor
+    holoscan::ops::InferenceOp::DataVecMap pre_processor_map;
+    pre_processor_map.insert("seg", std::vector<std::string>{"seg_preprocessed"});
+    
+    // Create DataVecMap for inference - model has 2 outputs: "outputs" and "proto"
+    holoscan::ops::InferenceOp::DataVecMap inference_map;
+    inference_map.insert("seg", std::vector<std::string>{"outputs", "proto"});
+    
+    inference_ = make_operator<holoscan::ops::InferenceOp>(
         "inference",
-        Arg("model_path_map") = std::map<std::string, std::string>{{"seg", model_file}},
-        Arg("pre_processor_map") = std::map<std::string, std::vector<std::string>>{
-            {"seg", {"seg_preprocessed"}}
-        },
-        Arg("backend") = std::string("trt"),
-        Arg("enable_fp16") = true,
-        Arg("allocator") = device_memory_pool_,
-        Arg("cuda_stream_pool") = cuda_stream_pool_
+        holoscan::Arg("model_path_map", model_path_map),
+        holoscan::Arg("pre_processor_map", pre_processor_map),
+        holoscan::Arg("inference_map", inference_map),
+        holoscan::Arg("backend", std::string("trt")),
+        holoscan::Arg("enable_fp16", true),
+        holoscan::Arg("allocator", device_memory_pool_),
+        holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
     );
     
     // YOLO postprocessor
     auto yolo_postprocessor = make_operator<YoloSegPostprocessorOp>(
-        "yolo_postprocessor",
-        label_dict_,
-        Arg("scores_threshold") = 0.2f,
-        Arg("num_class") = 12,
-        Arg("out_tensor_name") = std::string("out_tensor"),
-        Arg("allocator") = device_memory_pool_
+        "yolo_seg_postprocessor",
+        holoscan::Arg("scores_threshold", 0.2),
+        holoscan::Arg("num_class", int64_t(12)),
+        holoscan::Arg("out_tensor_name", std::string("out_tensor"))
     );
     
-    // Visualization
-    visualizer_ = make_operator<HolovizOp>(
-        "holoviz",
-        Arg("width") = 1920,
-        Arg("height") = 1080,
-        Arg("enable_render_buffer_input") = false,
-        Arg("enable_render_buffer_output") = record_output_,
-        Arg("allocator") = record_output_ ? device_memory_pool_ : host_memory_pool_,
-        Arg("cuda_stream_pool") = cuda_stream_pool_
-    );
+        // Visualization - Check for headless mode
+    bool headless_mode = std::getenv("HOLOVIZ_HEADLESS") != nullptr;
     
-    // Connect the pipeline
-    if (replayer_) {
+    if (headless_mode) {
+        std::cout << "=== HEADLESS MODE ENABLED ===" << std::endl;
+        std::cout << "HolovizOp will run without display window, outputting render buffer data." << std::endl;
+        
+        // Create HolovizOp in headless mode with render buffer output enabled
+        visualizer_ = make_operator<holoscan::ops::HolovizOp>(
+            "holoviz",
+            holoscan::Arg("width", int64_t(1920)),
+            holoscan::Arg("height", int64_t(1080)),
+            holoscan::Arg("enable_render_buffer_input", false),
+            holoscan::Arg("enable_render_buffer_output", true),  // Enable headless mode
+            holoscan::Arg("allocator", host_memory_pool_),
+            holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
+        );
+        
+        // Create a simple output operator to receive the render buffer
+        auto output_op = make_operator<PassthroughOp>("output");
+        
+        // Connect the pipeline with headless visualization
         add_flow(replayer_, format_converter_, {{"output", "source_video"}});
+        add_flow(format_converter_, inference_, {{"tensor", "receivers"}});
+        add_flow(inference_, yolo_postprocessor, {{"transmitter", "in"}});
+        add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}, {"output_specs", "input_specs"}});
+        add_flow(visualizer_, output_op, {{"render_buffer_output", "in"}});
+        
+        std::cout << "Pipeline configured for headless mode with render buffer output" << std::endl;
+    } else {
+        std::cout << "Running with display window" << std::endl;
+        
+        // Simplified HolovizOp configuration for testing - only show video stream
+        visualizer_ = make_operator<holoscan::ops::HolovizOp>(
+            "holoviz",
+            holoscan::Arg("width", int64_t(1920)),
+            holoscan::Arg("height", int64_t(1080)),
+            holoscan::Arg("enable_render_buffer_input", false),
+            holoscan::Arg("enable_render_buffer_output", false),
+            holoscan::Arg("allocator", host_memory_pool_),
+            holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
+        );
+        
+        // Connect the pipeline with normal visualization (matching Python version)
+        add_flow(replayer_, visualizer_, {{"output", "receivers"}});                // Video stream directly to visualizer
+        add_flow(replayer_, format_converter_, {{"output", "source_video"}});       // Video stream to preprocessor
+        add_flow(format_converter_, inference_, {{"tensor", "receivers"}});         // Preprocessed tensor to inference
+        add_flow(inference_, yolo_postprocessor, {{"transmitter", "in"}});          // Inference results to postprocessor
+        add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}, {"output_specs", "input_specs"}}); // Postprocessor results to visualizer
     }
     
-    add_flow(format_converter_, inference_, {{"tensor", "receivers"}});
-    add_flow(inference_, yolo_postprocessor, {{"transmitter", "in"}});
-    add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}});
-    
-    // Add recording pipeline if enabled
-    if (record_output_) {
-        setup_recording_pipeline();
-    }
+    std::cout << "Pipeline setup completed successfully!" << std::endl;
 }
 
 void UrologyApp::setup_recording_pipeline() {
@@ -199,76 +285,75 @@ void UrologyApp::setup_recording_pipeline() {
     
     try {
         // Create async condition for encoder
-        auto encoder_async_condition = std::make_shared<holoscan::AsynchronousCondition>(
-            "encoder_async_condition");
+        auto encoder_async_condition = std::make_shared<holoscan::AsynchronousCondition>();
         
         // Create video encoder context
-        video_encoder_context_ = std::make_shared<VideoEncoderContext>(
+        video_encoder_context_ = make_resource<VideoEncoderContext>(
             "video_encoder_context",
-            Arg("async_scheduling_term") = encoder_async_condition
+            holoscan::Arg("async_scheduling_term", encoder_async_condition)
         );
         
         // Create format converters for the recording pipeline
         holoviz_output_format_converter_ = make_operator<holoscan::ops::FormatConverterOp>(
             "holoviz_output_format_converter",
-            Arg("in_dtype") = std::string("rgba8888"),
-            Arg("out_dtype") = std::string("rgb888"),
-            Arg("resize_width") = 1920,
-            Arg("resize_height") = 1080,
-            Arg("pool") = device_memory_pool_
+            holoscan::Arg("in_dtype") = std::string("rgba8888"),
+            holoscan::Arg("out_dtype") = std::string("rgb888"),
+            holoscan::Arg("resize_width") = 1920,
+            holoscan::Arg("resize_height") = 1080,
+            holoscan::Arg("pool") = device_memory_pool_
         );
         
         encoder_input_format_converter_ = make_operator<holoscan::ops::FormatConverterOp>(
             "encoder_input_format_converter",
-            Arg("in_dtype") = std::string("rgb888"),
-            Arg("out_dtype") = std::string("yuv420"),
-            Arg("pool") = device_memory_pool_
+            holoscan::Arg("in_dtype") = std::string("rgb888"),
+            holoscan::Arg("out_dtype") = std::string("yuv420"),
+            holoscan::Arg("pool") = device_memory_pool_
         );
         
         // Create tensor to video buffer converter
         tensor_to_video_buffer_ = make_operator<TensorToVideoBufferOp>(
             "tensor_to_video_buffer",
-            Arg("video_format") = std::string("yuv420")
+            holoscan::Arg("video_format") = std::string("yuv420")
         );
         
         // Create video encoder request operator
+        std::string output_video_path = output_path_ + "/" + output_filename_;
+        std::string crc_file_path = output_path_ + "/surgical_video_output.txt";
+        
         video_encoder_request_ = make_operator<VideoEncoderRequestOp>(
             "video_encoder_request",
-            Arg("videoencoder_context") = video_encoder_context_,
-            Arg("inbuf_storage_type") = 1,
-            Arg("codec") = 0,
-            Arg("input_width") = 1920U,
-            Arg("input_height") = 1080U,
-            Arg("input_format") = std::string("yuv420planar"),
-            Arg("profile") = 2,
-            Arg("bitrate") = 20000000,
-            Arg("framerate") = 30,
-            Arg("config") = std::string("pframe_cqp"),
-            Arg("rate_control_mode") = 0,
-            Arg("qp") = 20U,
-            Arg("iframe_interval") = 5
+            holoscan::Arg("videoencoder_context", video_encoder_context_),
+            holoscan::Arg("inbuf_storage_type", 1),
+            holoscan::Arg("codec", 0),
+            holoscan::Arg("input_width", int64_t(1920)),
+            holoscan::Arg("input_height", int64_t(1080)),
+            holoscan::Arg("input_format", "yuv420planar"),
+            holoscan::Arg("profile", 2),
+            holoscan::Arg("bitrate", 20000000),
+            holoscan::Arg("framerate", 30),
+            holoscan::Arg("config", "pframe_cqp"),
+            holoscan::Arg("rate_control_mode", 0),
+            holoscan::Arg("qp", int64_t(20)),
+            holoscan::Arg("iframe_interval", 5)
         );
         
         // Create video encoder response operator
         video_encoder_response_ = make_operator<VideoEncoderResponseOp>(
             "video_encoder_response",
-            Arg("pool") = device_memory_pool_,
-            Arg("videoencoder_context") = video_encoder_context_,
-            Arg("outbuf_storage_type") = 1U
+            holoscan::Arg("pool", device_memory_pool_),
+            holoscan::Arg("videoencoder_context", video_encoder_context_),
+            holoscan::Arg("outbuf_storage_type", int64_t(1))
         );
         
         // Create bitstream writer
-        std::string output_video_path = output_path_ + "/" + output_filename_;
-        std::string crc_file_path = output_path_ + "/surgical_video_output.txt";
-        
         bitstream_writer_ = make_operator<VideoWriteBitstreamOp>(
-            "bitstream_writer",
-            Arg("output_video_path") = output_video_path,
-            Arg("input_crc_file_path") = crc_file_path,
-            Arg("frame_width") = 1920,
-            Arg("frame_height") = 1080,
-            Arg("inbuf_storage_type") = 1,
-            Arg("pool") = device_memory_pool_
+            "video_write_bitstream",
+            holoscan::Arg("output_video_path", output_video_path.c_str()),
+            holoscan::Arg("input_crc_file_path", crc_file_path.c_str()),
+            holoscan::Arg("frame_width", 1920),
+            holoscan::Arg("frame_height", 1080),
+            holoscan::Arg("inbuf_storage_type", 1),
+            holoscan::Arg("pool", device_memory_pool_)
         );
         
         // Connect the recording pipeline
@@ -311,10 +396,6 @@ void UrologyApp::set_record_enabled(bool enabled) {
     std::cout << "Recording " << (is_recording_ ? "enabled" : "disabled") << std::endl;
 }
 
-void UrologyApp::create_passthrough_ops(int count) {
-    // TODO: Implement passthrough operators for pipeline control
-}
-
 void UrologyApp::setup_visualization() {
     // Additional visualization setup if needed
 }
@@ -333,17 +414,18 @@ void UrologyApp::load_gxf_extensions() {
     };
     
     try {
-        auto context = executor().context();
+        // TODO: Implement GXF extension loading
+        // auto context = executor().context();
         for (const auto& ext : extensions) {
-            auto result = holoscan::gxf::GxfLoadExtension(context, ext.c_str());
-            if (result != GXF_SUCCESS) {
-                HOLOSCAN_LOG_WARN("Failed to load GXF extension: {}", ext);
-            } else {
-                HOLOSCAN_LOG_INFO("Loaded GXF extension: {}", ext);
-            }
+            // TODO: Implement GXF extension loading
+            // auto result = holoscan::gxf::GxfLoadExtension(context, ext.c_str());
+            // if (result != GXF_SUCCESS) {
+            //     std::cerr << "Failed to load GXF extension: " << ext << std::endl;
+            // }
+            (void)ext; // Suppress unused variable warning
         }
     } catch (const std::exception& e) {
-        HOLOSCAN_LOG_ERROR("Error loading GXF extensions: {}", e.what());
+        std::cerr << "Error loading GXF extensions: " << e.what() << std::endl;
     }
 }
 

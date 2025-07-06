@@ -1,410 +1,343 @@
 # Urology Inference Holoscan C++
 
-A high-performance C++ implementation of urology inference application using NVIDIA Holoscan SDK for real-time medical image segmentation and analysis.
+🚀 **一鍵式醫學影像分析系統** - 基於 NVIDIA Holoscan SDK 的泌尿科推理應用程序
 
-## Overview
+## ✨ 特點
 
-This application performs real-time YOLO-based segmentation on urology medical images, identifying and segmenting various anatomical structures including:
+- 🎯 **一鍵運行**：無需手動安裝依賴，一個命令搞定所有
+- 🔥 **GPU 加速**：支援 NVIDIA GPU 加速推理
+- 📹 **視頻處理**：自動處理視頻格式轉換
+- 🐳 **容器化**：完全基於 Docker，環境一致性保證
+- 🛠️ **OpenCV 集成**：完整的圖像處理功能
 
-- Spleen
-- Left Kidney
-- Left Renal Artery
-- Left Renal Vein
-- Left Ureter
-- Psoas Muscle
-- And other urological structures
+## 🚀 快速開始
 
-## Features
-
-- **Real-time Processing**: Built with NVIDIA Holoscan SDK for high-performance streaming
-- **GPU Acceleration**: TensorRT inference with FP16 optimization
-- **Multiple Input Sources**: Support for video files and capture cards
-- **Advanced Visualization**: Real-time overlay of segmentation results
-- **Configurable Pipeline**: YAML-based configuration system
-- **Recording Capability**: Optional video recording with H.264 encoding
-
-## Requirements
-
-### System Requirements
-- NVIDIA GPU with CUDA support
-- Ubuntu 20.04 or later
-- NVIDIA Holoscan SDK 2.1+
-- CMake 3.20+
-- C++17 compiler
-
-### Dependencies
-- NVIDIA Holoscan SDK
-- OpenCV 4.x
-- YAML-cpp
-- CUDA Toolkit
-- TensorRT
-- Qt6 (optional, for GUI)
-
-## Installation
-
-### Option 1: Docker (推薦)
-
-使用基於 NVIDIA Holoscan SDK 3.3.0 的 Docker 容器，無需手動安裝依賴：
+### 方法一：使用 Make（推薦）
 
 ```bash
-# 快速開始 - 使用 Docker Compose
-docker-compose up urology-inference
+# 完整流程：設置 + 構建 + 測試
+make all
 
-# 或者使用構建腳本
-./scripts/docker-build.sh --runtime --release
-docker run --gpus all urology-inference:runtime-latest --help
-
-# 開發模式
-docker-compose --profile development up urology-inference-dev
+# 運行應用程序
+make run
 ```
 
-詳細的 Docker 使用說明請參閱 [DOCKER_README.md](./DOCKER_README.md)
-
-### Option 2: 本地安裝
-
-#### 1. Install Holoscan SDK
-Follow the [official Holoscan installation guide](https://docs.nvidia.com/holoscan/sdk-user-guide/installation.html).
-
-#### 2. Install Dependencies
-```bash
-sudo apt update
-sudo apt install -y \
-    build-essential \
-    cmake \
-    libopencv-dev \
-    libyaml-cpp-dev \
-    qt6-base-dev \
-    pkg-config
-```
-
-#### 3. Build the Application
-```bash
-cd urology-inference-holoscan-cpp
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-```
-
-## Usage
-
-### Docker 使用方式 (推薦)
+### 方法二：使用腳本
 
 ```bash
-# 基本運行
-docker run --gpus all urology-inference:runtime --help
+# 一鍵構建
+./scripts/build_and_run.sh
 
-# 使用自定義數據
-docker run --gpus all \
-  -v $(pwd)/data:/app/data:ro \
-  -v $(pwd)/models:/app/models:ro \
-  urology-inference:runtime \
-  --source replayer --record_output true
-
-# 運行測試
-docker run --gpus all urology-inference:runtime test
-
-# 性能基準測試
-docker run --gpus all urology-inference:runtime benchmark
-
-# 進入開發模式
-docker-compose --profile development run --rm urology-inference-dev
+# 運行應用程序
+./run_app.sh
 ```
 
-### 本地使用方式
+### 方法三：使用 Docker Compose
 
 ```bash
-./urology_inference_holoscan_cpp -d /path/to/data
+# 構建
+docker compose run --rm urology-dev
+
+# 運行
+docker compose run --rm urology-run
 ```
 
-### Command Line Options
-- `-d, --data PATH`: Set the input data directory
-- `-s, --source TYPE`: Set source type (`replayer` or `yuan`)
-- `-o, --output FILE`: Set output filename for recording
-- `-l, --labels FILE`: Set custom labels file
-- `-h, --help`: Show help message
+## 📋 可用命令
 
-### Configuration
+| 命令 | 說明 |
+|------|------|
+| `make all` | 完整流程：設置 + 構建 + 測試 |
+| `make build` | 一鍵式構建應用程序 |
+| `make run` | 運行應用程序 |
+| `make test` | 運行快速測試 |
+| `make dev` | 啟動開發環境 |
+| `make clean` | 清理構建文件 |
+| `make info` | 查看項目信息 |
+| `make logs` | 查看應用程序日誌 |
 
-The application uses YAML configuration files located in `src/config/`:
-
-- `app_config.yaml`: Main application configuration
-- `labels.yaml`: Class labels and colors
-
-#### Example Configuration
-```yaml
-source: "replayer"
-model_name: "Urology_yolov11x-seg_3-13-16-17val640rezize_1_4.40.0_nms.onnx"
-yolo_postprocessor:
-  scores_threshold: 0.2
-  num_class: 12
-```
-
-## Directory Structure
+## 📁 項目結構
 
 ```
 urology-inference-holoscan-cpp/
-├── CMakeLists.txt
-├── README.md
-├── include/
-│   ├── urology_app.hpp
-│   ├── operators/
-│   │   └── yolo_seg_postprocessor.hpp
-│   └── utils/
-│       └── yolo_utils.hpp
-├── src/
-│   ├── main.cpp
-│   ├── urology_app.cpp
-│   ├── operators/
-│   │   ├── yolo_seg_postprocessor.cpp
-│   │   ├── dummy_receiver.cpp
-│   │   └── passthrough.cpp
-│   ├── utils/
-│   │   ├── yolo_utils.cpp
-│   │   └── cv_utils.cpp
-│   └── config/
-│       ├── app_config.yaml
-│       ├── labels.yaml
-│       └── app_config.cpp
-├── data/
-│   ├── models/
-│   ├── inputs/
-│   └── output/
-└── scripts/
+├── data/                   # 數據目錄
+│   ├── models/            # AI 模型文件 (ONNX)
+│   ├── inputs/            # 輸入視頻 (GXF 格式)
+│   ├── videos/            # 原始視頻文件
+│   ├── output/            # 輸出結果
+│   ├── logs/              # 應用程序日誌
+│   └── config/            # 配置文件
+├── src/                   # 源代碼
+│   ├── operators/         # 自定義操作符
+│   ├── utils/             # 工具函數
+│   └── config/            # 配置管理
+├── include/               # 頭文件
+├── scripts/               # 核心腳本
+├── CMakeLists.txt         # 構建配置
+├── Makefile              # 簡化命令
+├── Dockerfile            # 容器構建
+├── docker-compose.yml    # 容器編排
+└── metadata.json         # HoloHub 元數據
 ```
 
-## Model Setup
+## 🔧 系統要求
 
-1. Download the YOLO segmentation model:
-   - Contact your administrator for the model file
-   - Place the model in `data/models/` directory
+- **Docker**：版本 20.10+
+- **NVIDIA Container Toolkit**：用於 GPU 支持
+- **Docker Compose**：用於容器編排
 
-2. Prepare input data:
-   - For video files: Place in `data/inputs/`
-   - For live capture: Configure capture card settings
+⚠️ **重要**：此系統完全在容器內運行，無需在主機系統安裝 Holoscan SDK 或 OpenCV
 
-## Pipeline Architecture
+### 🐳 容器化優勢
 
-The application uses a multi-stage processing pipeline:
+- **環境隔離**：不會影響主機系統
+- **依賴管理**：所有依賴都在容器內自動安裝
+- **版本一致**：確保所有開發者使用相同的環境
+- **跨平台**：在任何支持 Docker 的系統上運行
 
-1. **Video Source**: Video stream replayer or capture card input
-2. **Preprocessing**: Format conversion and resizing (640x640)
-3. **Inference**: TensorRT-based YOLO inference
-4. **Postprocessing**: YOLO output parsing and NMS
-5. **Visualization**: Real-time overlay rendering
-6. **Recording** (optional): H.264 video encoding
+## 📦 預裝的依賴（Dockerfile 中預裝）
 
-## Performance Optimization
+所有依賴都在 Docker 鏡像構建時預先安裝，啟動容器時無需重新安裝：
 
-- **Memory Pools**: Efficient GPU/CPU memory management
-- **CUDA Streams**: Asynchronous processing pipeline
-- **TensorRT**: FP16 inference optimization
-- **Zero-Copy**: Direct GPU memory operations
+- ✅ **NVIDIA Holoscan SDK 3.3.0**：完整的醫學影像處理框架
+- ✅ **OpenCV 4.6.0**：完整的圖像處理和電腦視覺庫（所有模組）
+- ✅ **CUDA/TensorRT**：GPU 加速推理
+- ✅ **FFmpeg**：完整的視頻編碼和解碼支持
+- ✅ **X11 GUI 支持**：圖形界面顯示（libgtk-3-dev 等）
+- ✅ **CMake + Ninja**：高效構建系統
+- ✅ **開發工具**：GDB、Valgrind、Clang-tidy 等
 
-## Troubleshooting
+⚡ **優勢**：
+- 🚀 **快速啟動**：無需等待依賴安裝
+- 🔒 **版本鎖定**：確保環境一致性
+- 💾 **節省頻寬**：避免重複下載
 
-### Common Issues
+## 🎯 使用流程
 
-1. **Model Loading Error**
-   - Verify model file path and permissions
-   - Check TensorRT compatibility
+### 1. 初次使用
 
-2. **CUDA Out of Memory**
-   - Reduce batch size or input resolution
-   - Adjust memory pool sizes
+```bash
+# 克隆項目
+git clone <repository-url>
+cd urology-inference-holoscan-cpp
 
-3. **Performance Issues**
-   - Enable FP16 inference
-   - Check GPU utilization
-   - Verify CUDA streams configuration
-
-### Debugging
-
-Enable debug logging:
-```cpp
-holoscan::set_log_level(holoscan::LogLevel::DEBUG);
+# 一鍵完成所有設置
+make all
 ```
 
-## Development
+### 2. 日常使用
 
-### Adding New Operators
-1. Create header file in `include/operators/`
-2. Implement operator in `src/operators/`
-3. Register in `CMakeLists.txt`
-4. Update pipeline in `urology_app.cpp`
+```bash
+# 運行應用程序
+make run
 
-### Custom Postprocessing
-Extend `YoloSegPostprocessorOp` class for custom processing logic.
-
-## License
-
-Apache License 2.0 - See LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch
-3. Make changes with tests
-4. Submit pull request
-
-## Support
-
-For issues and questions:
-- Check the troubleshooting section
-- Review Holoscan SDK documentation
-- Contact the development team
-
-## Acknowledgments
-
-- NVIDIA Holoscan SDK team
-- Original Python implementation contributors
-- Medical imaging domain experts 
-
-## 新增功能 - Video Encoder 支持
-
-此版本已完整實現基於holohub H.264應用程序的video encoder功能，與Python版本功能對等。
-
-### Video Encoder 組件
-
-基於holohub的h264_endoscopy_tool_tracking應用程序，我們實現了以下組件：
-
-#### 1. VideoEncoderRequestOp
-- 處理YUV幀到H.264位元流的編碼請求
-- 支持硬體加速編碼
-- 可配置編碼參數（bitrate, framerate, profile等）
-
-#### 2. VideoEncoderResponseOp  
-- 處理編碼後的H.264位元流輸出
-- 管理編碼器響應和緩衝區
-
-#### 3. VideoEncoderContext
-- 保存編碼器上下文和狀態
-- 支持異步調度條件
-
-#### 4. VideoWriteBitstreamOp
-- 將H.264位元流寫入磁碟
-- 支持CRC檢查和檔案管理
-
-#### 5. TensorToVideoBufferOp
-- 將Tensor數據轉換為視頻緩衝區
-- 支持YUV420格式轉換
-
-### 錄製Pipeline架構
-
-```
-Holoviz (render_buffer_output) 
-    ↓
-HolovizOutputFormatConverter (RGBA→RGB)
-    ↓  
-EncoderInputFormatConverter (RGB→YUV420)
-    ↓
-TensorToVideoBufferOp
-    ↓
-VideoEncoderRequestOp → VideoEncoderResponseOp
-    ↓
-VideoWriteBitstreamOp → Output H.264 file
+# 或者查看幫助
+make help
 ```
 
-### 配置參數
+### 3. 開發模式
 
-錄製功能可通過以下參數配置：
+```bash
+# 啟動開發環境
+make dev
 
-```yaml
-# 基本錄製設置
-record_output: true
-
-# 編碼器參數
-video_encoder_request:
-  inbuf_storage_type: 1
-  codec: 0                    # H.264
-  input_width: 1920
-  input_height: 1080
-  input_format: "yuv420planar"
-  profile: 2                  # High Profile
-  bitrate: 20000000          # 20 Mbps
-  framerate: 30
-  config: "pframe_cqp"
-  rate_control_mode: 0
-  qp: 20
-  iframe_interval: 5
-
-# 格式轉換參數
-holoviz_output_format_converter:
-  in_dtype: "rgba8888"
-  out_dtype: "rgb888"
-  resize_width: 1920
-  resize_height: 1080
-
-encoder_input_format_converter:
-  in_dtype: "rgb888"
-  out_dtype: "yuv420"
+# 在容器內進行開發
+# 修改代碼後重新構建
+make build
 ```
 
-### GXF擴展支持
+## 📊 測試和驗證
 
-應用程序會自動加載以下GXF擴展：
-- `libgxf_videoencoder.so` - 視頻編碼器核心
-- `libgxf_videoencoderio.so` - 視頻編碼器I/O
-- `libgxf_videodecoder.so` - 視頻解碼器
-- `libgxf_videodecoderio.so` - 視頻解碼器I/O
+```bash
+# 運行快速測試
+make test
 
-### 使用方法
+# 查看構建信息
+make info
 
-1. **啟用錄製功能**：
+# 查看日誌
+make logs
+```
+
+## 🐛 故障排除
+
+### 常見問題
+
+1. **Docker 權限問題**
    ```bash
-   ./build/urology_inference_holoscan_cpp -d ./data --record_output true
+   sudo usermod -aG docker $USER
+   # 重新登錄後生效
    ```
 
-2. **自定義輸出檔案**：
+2. **GPU 支援問題**
    ```bash
-   ./build/urology_inference_holoscan_cpp -o my_recording.h264
+   # 檢查 NVIDIA Docker
+   docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
    ```
 
-3. **運行時控制錄製**：
-   ```cpp
-   app->toggle_record();        // 切換錄製狀態
-   app->set_record_enabled(true); // 啟用錄製
+3. **構建失敗**
+   ```bash
+   # 清理並重新構建
+   make clean
+   make build
    ```
 
-### 輸出檔案
+### 查看詳細錯誤
 
-- **視頻檔案**：`data/output/{timestamp}.h264`
-- **CRC檔案**：`data/output/surgical_video_output.txt`
-- **日誌檔案**：包含編碼統計和錯誤資訊
+```bash
+# 查看構建日誌
+make build 2>&1 | tee build.log
 
-### 性能優化
+# 查看運行日誌
+make logs
+```
 
-- **GPU加速**：使用CUDA streams進行異步處理
-- **內存池**：優化的塊內存分配器
-- **硬體編碼**：NVENC H.264硬體編碼器
-- **零拷貝**：GPU Direct RDMA支持（未來版本）
+## 🔄 更新和維護
 
-### 與Python版本的對比
+```bash
+# 清理舊文件
+make clean
 
-| 功能 | Python版本 | C++版本 | 狀態 |
-|------|------------|---------|------|
-| 基本錄製 | ✅ | ✅ | 完成 |
-| H.264編碼 | ✅ | ✅ | 完成 |
-| 動態錄製控制 | ✅ | ✅ | 完成 |
-| 編碼參數配置 | ✅ | ✅ | 完成 |
-| PassThrough操作符 | ✅ | 🚧 | 計劃中 |
-| YUAN擷取卡支持 | ✅ | 🚧 | 計劃中 |
+# 重新構建
+make build
 
-### 故障排除
+# 更新 Docker 鏡像
+docker pull nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu
+```
 
-1. **GXF擴展加載失敗**：
-   - 確保Holoscan SDK正確安裝
-   - 檢查LD_LIBRARY_PATH包含GXF擴展路徑
+## 📚 更多信息
 
-2. **編碼錯誤**：
-   - 驗證GPU驅動程序支持NVENC
-   - 檢查視頻格式和參數設置
+- [NVIDIA Holoscan SDK 文檔](https://docs.nvidia.com/holoscan/)
+- [OpenCV 文檔](https://docs.opencv.org/)
+- [Docker 文檔](https://docs.docker.com/)
 
-3. **內存不足**：
-   - 調整內存池大小
-   - 降低視頻解析度或bitrate
+## 🤝 貢獻
 
-### 參考資料
+歡迎提交 Issues 和 Pull Requests！
 
-- [NVIDIA Holoscan SDK文檔](https://docs.nvidia.com/holoscan/sdk-user-guide/)
-- [HoloHub H.264應用程序](https://github.com/nvidia-holoscan/holohub/tree/main/applications/h264)
-- [Video Encoder Operator文檔](https://github.com/nvidia-holoscan/holohub/tree/main/operators/video_encoder) 
+## 📄 許可證
+
+本項目採用 [MIT 許可證](LICENSE)
+
+---
+
+💡 **提示**：如果您是第一次使用，建議直接運行 `make all` 來體驗完整的一鍵式流程！
+
+## 運行應用程序
+
+### 基本運行
+```bash
+# 使用 Makefile（推薦）
+make run
+
+# 或直接使用腳本
+./scripts/run.sh
+```
+
+### Headless 模式（無顯示視窗）
+
+**重要**: HolovizOp 的 headless 模式通過 `enable_render_buffer_output=true` 實現，這樣可以在無顯示環境下運行，同時保持完整的渲染管道功能。
+
+```bash
+# 使用 Makefile
+make run-headless
+
+# 或使用腳本參數
+./scripts/run.sh --headless
+
+# 或設置環境變量
+export HOLOVIZ_HEADLESS=1
+./scripts/run.sh
+```
+
+### 其他運行選項
+```bash
+# 指定數據路徑
+./scripts/run.sh --data /path/to/data
+
+# 指定源類型
+./scripts/run.sh --source yuan
+
+# 設置日誌級別
+./scripts/run.sh --log-level DEBUG
+
+# 組合使用
+./scripts/run.sh --headless --log-level INFO --data ./data
+```
+
+## 🎯 功能特色
+
+### 🎯 核心功能
+- **實時視頻推理**: 使用 YOLO 模型進行泌尿科手術工具檢測和分割
+- **多源輸入支持**: 支持 GXF 格式的視頻回放和實時視頻流
+- **高性能處理**: 基於 CUDA 和 TensorRT 的 GPU 加速推理
+- **可視化輸出**: 使用 HolovizOp 進行實時結果可視化
+
+### 🖥️ Headless 模式支持
+- **無顯示運行**: 支持在無 GUI 環境下運行，適合服務器部署
+- **渲染緩衝輸出**: HolovizOp 在 headless 模式下輸出渲染緩衝數據
+- **靈活部署**: 支持容器化和遠程部署場景
+
+### 🐳 Docker 集成
+- **一鍵構建**: 使用 `make build` 或 `scripts/build_and_run.sh` 一鍵構建
+- **優化的容器配置**: 基於 NVIDIA Holoscan 官方容器
+- **OpenCV 集成**: 完整的 OpenCV 4.6.0 支持
+
+## 📚 更多信息
+
+- [NVIDIA Holoscan SDK 文檔](https://docs.nvidia.com/holoscan/)
+- [OpenCV 文檔](https://docs.opencv.org/)
+- [Docker 文檔](https://docs.docker.com/)
+
+## 🤝 貢獻
+
+歡迎提交 Issues 和 Pull Requests！
+
+## 📄 許可證
+
+本項目採用 [MIT 許可證](LICENSE)
+
+---
+
+💡 **提示**：如果您是第一次使用，建議直接運行 `make all` 來體驗完整的一鍵式流程！
+
+## 運行應用程序
+
+### 基本運行
+```bash
+# 使用 Makefile（推薦）
+make run
+
+# 或直接使用腳本
+./scripts/run.sh
+```
+
+### Headless 模式（無顯示視窗）
+
+**重要**: HolovizOp 的 headless 模式通過 `enable_render_buffer_output=true` 實現，這樣可以在無顯示環境下運行，同時保持完整的渲染管道功能。
+
+```bash
+# 使用 Makefile
+make run-headless
+
+# 或使用腳本參數
+./scripts/run.sh --headless
+
+# 或設置環境變量
+export HOLOVIZ_HEADLESS=1
+./scripts/run.sh
+```
+
+### 其他運行選項
+```bash
+# 指定數據路徑
+./scripts/run.sh --data /path/to/data
+
+# 指定源類型
+./scripts/run.sh --source yuan
+
+# 設置日誌級別
+./scripts/run.sh --log-level DEBUG
+
+# 組合使用
+./scripts/run.sh --headless --log-level INFO --data ./data
+``` 

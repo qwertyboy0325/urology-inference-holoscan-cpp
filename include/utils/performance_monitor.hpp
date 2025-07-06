@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <functional>
+#include <thread>
 
 namespace urology {
 namespace utils {

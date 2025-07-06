@@ -1,0 +1,74 @@
+# Advanced Pipeline Control Configuration
+# This replaces simple passthrough with intelligent pipeline management
+
+frame_scheduler:
+  max_concurrent_frames: 3
+  frame_rate_limit: 30.0
+  adaptive_scheduling: true
+  drop_frames_on_overload: true
+
+conditional_router:
+  routing_mode: "adaptive"  # Options: "process", "bypass", "adaptive", "dual"
+  confidence_threshold: 0.7
+  enable_fallback: true
+  performance_threshold_fps: 15.0
+  
+  # Routing policies
+  policies:
+    high_load:
+      mode: "bypass"
+      trigger_cpu_percent: 85
+      trigger_gpu_percent: 90
+    
+    normal_load:
+      mode: "process"
+      trigger_cpu_percent: 60
+      trigger_gpu_percent: 70
+    
+    validation_mode:
+      mode: "dual"
+      enable_comparison: true
+      log_differences: true
+
+pipeline_broadcast:
+  mode: 1  # 0=broadcast, 1=round_robin
+  num_outputs: 2
+  load_balancing: true
+
+pipeline_gather:
+  tick_source_limit: 1
+  preserve_order: true
+  timeout_ms: 100
+  priority_input: 0  # Primary input for ordering
+
+# Performance monitoring integration
+performance_monitor:
+  enable_profiling: true
+  report_interval_ms: 1000
+  log_bottlenecks: true
+  adaptive_tuning: true
+  
+  thresholds:
+    fps_warning: 20.0
+    fps_critical: 10.0
+    latency_warning_ms: 100.0
+    latency_critical_ms: 200.0
+
+# Medical safety features
+medical_safety:
+  always_show_original: true
+  ai_overlay_transparency: 0.7
+  fallback_on_ai_failure: true
+  audit_logging: true
+  
+  validation:
+    enable_dual_path: false  # Enable for clinical validation
+    compare_results: false
+    log_discrepancies: false
+
+# Scheduler configuration
+scheduler:
+  type: "MultiThreadScheduler"  # Options: "GreedyScheduler", "MultiThreadScheduler", "EventBasedScheduler"
+  max_worker_threads: 4
+  check_recession_period_ms: 5.0
+  enable_stats: true 

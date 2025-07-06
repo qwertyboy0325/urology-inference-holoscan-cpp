@@ -1,8 +1,39 @@
-#include <holoscan/holoscan.hpp>
+#include "holoscan_fix.hpp"
+#include "urology_app.hpp"
 #include <iostream>
 #include <memory>
+#include <thread>
+#include <atomic>
 
-#include "urology_app.hpp"
+namespace {
+    std::atomic<bool> should_quit{false};
+    
+    void keyboard_handler(urology::UrologyApp* app) {
+        char key;
+        while (!should_quit.load()) {
+            std::cin >> key;
+            switch (key) {
+                case 'p':
+                case 'P':
+                    app->toggle_pipeline();
+                    std::cout << "Pipeline " << (app->is_pipeline_paused() ? "PAUSED" : "RESUMED") << std::endl;
+                    break;
+                case 'r':
+                case 'R':
+                    app->toggle_record();
+                    std::cout << "Recording " << (app->is_recording() ? "STARTED" : "STOPPED") << std::endl;
+                    break;
+                case 'q':
+                case 'Q':
+                    should_quit.store(true);
+                    break;
+                default:
+                    std::cout << "Controls: P=Pause/Resume, R=Record, Q=Quit" << std::endl;
+                    break;
+            }
+        }
+    }
+}
 
 int main(int argc, char** argv) {
     // Parse command line arguments
@@ -53,12 +84,22 @@ int main(int argc, char** argv) {
         std::cout << "Data path: " << data_path << std::endl;
         std::cout << "Source: " << source << std::endl;
         
+        // Start keyboard control in separate thread
+        std::thread keyboard_thread(keyboard_handler, app.get());
+        
+        // Run the application
         app->run();
         
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        should_quit.store(true);
+        if (keyboard_thread.joinable()) {
+            keyboard_thread.join();
     }
     
+        std::cout << "Application completed successfully" << std::endl;
     return 0;
+        
+    } catch (const std::exception& ex) {
+        std::cerr << "Application failed: " << ex.what() << std::endl;
+        return -1;
+    }
 } 

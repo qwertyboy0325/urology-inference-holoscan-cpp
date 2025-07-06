@@ -1,0 +1,208 @@
+version: '3.8'
+
+services:
+  # 開發和構建服務（整合成功的 X11 解決方案）
+  urology-dev-x11:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: urology-dev-x11
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data
+      # X11 支持（使用成功的配置）
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTH:-/tmp/.docker.xauth.urology}:${XAUTH:-/tmp/.docker.xauth.urology}:rw
+      # nvidia_icd.json 支持
+      - /usr/share/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/nvidia_icd.json:ro
+    environment:
+      - DISPLAY=${DISPLAY:-localhost:10.0}
+      - XAUTHORITY=${XAUTH:-/tmp/.docker.xauth.urology}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=graphics,video,compute,utility,display
+      # OpenGL 間接渲染（SSH 環境）
+      - LIBGL_ALWAYS_INDIRECT=1
+      - MESA_GL_VERSION_OVERRIDE=3.3
+      # 編譯器設置
+      - CMAKE_C_COMPILER=/usr/bin/gcc
+      - CMAKE_CXX_COMPILER=/usr/bin/g++
+      - CC=/usr/bin/gcc
+      - CXX=/usr/bin/g++
+    network_mode: host
+    ipc: host
+    pid: host
+    stdin_open: true
+    tty: true
+    cap_add:
+      - CAP_SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    ulimits:
+      memlock: -1
+    command: >
+      bash -c "
+      echo '=== Urology Inference 開發環境（完整 X11 支持）===' &&
+      echo '📋 環境檢查：' &&
+      echo 'DISPLAY=' \$DISPLAY &&
+      echo 'XAUTHORITY=' \$XAUTHORITY &&
+      echo 'OpenCV 版本：' \$(pkg-config --modversion opencv4) &&
+      echo 'Holoscan 版本：3.3.0' &&
+      echo '' &&
+      echo '🧪 安裝 X11 測試工具...' &&
+      apt update -qq && apt install -y x11-apps xauth &&
+      echo '' &&
+      echo '🎯 測試 X11 連接...' &&
+      echo '檢查 X11 socket:' &&
+      ls -la /tmp/.X11-unix/ || echo '❌ X11 socket 不存在' &&
+      echo '' &&
+      echo '檢查認證文件:' &&
+      ls -la \$XAUTHORITY || echo '❌ 認證文件不存在' &&
+      echo '' &&
+      echo '測試 xauth:' &&
+      xauth list 2>/dev/null || echo '⚠️  xauth 列表為空' &&
+      echo '' &&
+      echo '測試 X11 應用:' &&
+      timeout 3 xeyes 2>/dev/null & XEYES_PID=\$! &&
+      sleep 1 &&
+      if kill -0 \$XEYES_PID 2>/dev/null; then
+          echo '✅ X11 連接成功！xeyes 正在運行' &&
+          kill \$XEYES_PID 2>/dev/null || true
+      else
+          echo '❌ xeyes 啟動失敗'
+      fi &&
+      echo '' &&
+      echo '🎯 測試 Holoscan Hello World...' &&
+      /opt/nvidia/holoscan/examples/hello_world/cpp/hello_world &&
+      echo '' &&
+      echo '🔨 構建項目...' &&
+      chmod 755 /workspace &&
+      mkdir -p build && cd build &&
+      if cmake .. && make -j\$(nproc); then
+          echo '✅ 項目構建成功！' &&
+          echo '' &&
+          echo '🎯 可用的運行選項：' &&
+          echo '' &&
+          echo '🖥️  完整 UI 模式（X11 顯示）：' &&
+          echo './urology_inference_holoscan_cpp --data=../data' &&
+          echo '' &&
+          echo '🖥️  Headless 模式（無 UI）：' &&
+          echo 'HOLOVIZ_HEADLESS=1 ./urology_inference_holoscan_cpp --data=../data' &&
+          echo '' &&
+          echo '🧪 簡化測試：' &&
+          echo './simple_inference_test' &&
+          echo '' &&
+          echo '📁 可用的執行文件：' &&
+          ls -la *urology* *simple* *hello* 2>/dev/null || echo '無執行文件' &&
+          chown -R 1007:100 /workspace/build/ 2>/dev/null || true
+      else
+          echo '❌ 項目構建失敗'
+      fi &&
+      echo '' &&
+      echo '🎯 開發環境已準備就緒！' &&
+      bash
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # 運行服務（X11 UI 模式）
+  urology-run-x11:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: urology-run-x11
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTH:-/tmp/.docker.xauth.urology}:${XAUTH:-/tmp/.docker.xauth.urology}:rw
+      - /usr/share/vulkan/icd.d/nvidia_icd.json:/usr/share/vulkan/icd.d/nvidia_icd.json:ro
+    environment:
+      - DISPLAY=${DISPLAY:-localhost:10.0}
+      - XAUTHORITY=${XAUTH:-/tmp/.docker.xauth.urology}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=graphics,video,compute,utility,display
+      - LIBGL_ALWAYS_INDIRECT=1
+      - MESA_GL_VERSION_OVERRIDE=3.3
+    network_mode: host
+    ipc: host
+    pid: host
+    cap_add:
+      - CAP_SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    ulimits:
+      memlock: -1
+    depends_on:
+      - urology-dev-x11
+    command: >
+      bash -c "
+      echo '🎯 運行 Urology Inference（X11 UI 模式）...' &&
+      cd /workspace/build &&
+      ./urology_inference_holoscan_cpp --data=../data
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # 運行服務（Headless 模式）
+  urology-run-headless:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: urology-run-headless
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ./data:/workspace/data
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - HOLOVIZ_HEADLESS=1
+    depends_on:
+      - urology-dev-x11
+    command: >
+      bash -c "
+      echo '🎯 運行 Urology Inference（Headless 模式）...' &&
+      cd /workspace/build &&
+      HOLOVIZ_HEADLESS=1 ./urology_inference_holoscan_cpp --data=../data
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# Networks
+networks:
+  urology-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes
+volumes:
+  urology_logs:
+    driver: local
+  urology_output:
+    driver: local
+  urology_build_cache:
+    driver: local
+  urology_ccache:
+    driver: local 

@@ -31,9 +31,17 @@ urology_inference_holoscan_cpp_qt
 # Data directories
 data/models/*.onnx
 data/models/*.engine
+data/models/*.plan
 data/inputs/*
 data/output/*
+data/logs/*
+data/videos/*
 !data/*/README.md
+!data/*/.gitkeep
+
+# GXF entity files
+*.gxf_entities
+*.gxf_index
 
 # Logs
 logs/

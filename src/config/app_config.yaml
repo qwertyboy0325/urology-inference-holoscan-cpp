@@ -9,7 +9,7 @@ record_type: "none"  # or "input" if you want to record input video stream, or "
 record_output: true # Setting this to `false` disables H264 encoding of output and recording
 
 model_type: "yolo_seg_v9"
-model_name: "Urology_yolov11x-seg_3-13-16-17val640rezize_1_4.40.0_nms.onnx"
+model_name: "urology_yolov9c_3000random640resize_20240811_4.34_nhwc.onnx"
 
 # Video source configuration
 yuan:
@@ -51,6 +51,7 @@ yolo_postprocessor:
 viz: # Holoviz
   width: 1920
   height: 1080
+  headless: false  # Set to true to run without display window
   color_lut: [
     [ 0.0000, 0.0000, 0.0000, 0.0000 ],  # Background
     [ 0.1451, 0.9412, 0.6157, 0.2000 ],  # Spleen

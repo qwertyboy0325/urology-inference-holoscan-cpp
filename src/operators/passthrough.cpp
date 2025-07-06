@@ -1,4 +1,4 @@
-#include <holoscan/holoscan.hpp>
+#include "holoscan_fix.hpp"
 
 namespace urology {
 
@@ -9,21 +9,20 @@ public:
     PassthroughOp() = default;
 
     void setup(holoscan::OperatorSpec& spec) override {
-        spec.input("in");
-        spec.output("out");
-        spec.param("enabled", enabled_, "Enable passthrough", 
-                   "Whether to pass through data", true);
+        spec.input<holoscan::Tensor>("in");
+        spec.output<holoscan::Tensor>("out");
+        spec.param(enabled_, "enabled", "Enable passthrough");
     }
 
     void compute(holoscan::InputContext& op_input, 
                 holoscan::OutputContext& op_output,
-                holoscan::ExecutionContext& context) override {
-        auto in_message = op_input.receive("in");
+                holoscan::ExecutionContext&) override {
+        if (!enabled_) return;
         
-        if (enabled_) {
-            op_output.emit(in_message, "out");
+        auto in_message = op_input.receive<holoscan::Tensor>("in");
+        if (in_message) {
+            op_output.emit(in_message.value(), "out");
         }
-        // If not enabled, simply discard the message
     }
 
     void set_enabled(bool enabled) {
@@ -31,7 +30,7 @@ public:
     }
 
 private:
-    bool enabled_ = true;
+    holoscan::Parameter<bool> enabled_;
 };
 
 } // namespace urology 

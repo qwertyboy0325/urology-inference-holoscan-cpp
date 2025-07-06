@@ -7,8 +7,9 @@
 #include <holoscan/operators/holoviz/holoviz.hpp>
 #include <holoscan/operators/segmentation_postprocessor/segmentation_postprocessor.hpp>
 #include <holoscan/operators/gxf_codelet/gxf_codelet.hpp>
-#include <holoscan/resources/gxf_component.hpp>
-#include <holoscan/conditions/condition.hpp>
+#include <holoscan/core/gxf/gxf_component.hpp>
+#include <holoscan/core/condition.hpp>
+
 
 #include <string>
 #include <map>
@@ -38,14 +39,30 @@ public:
 
     void compose() override;
 
-    // Control functions
+    // Pipeline control (simplified)
+    void pause_pipeline() { 
+        std::cout << "Pipeline pause requested" << std::endl;
+    }
+    
+    void resume_pipeline() { 
+        std::cout << "Pipeline resume requested" << std::endl;
+    }
+    
+    void toggle_pipeline() { 
+        std::cout << "Pipeline toggle requested" << std::endl;
+    }
+    
+    bool is_pipeline_paused() const { 
+        return false; // Always running for now
+    }
+
+    // Recording control (separate from pipeline pause)
     void toggle_record();
     void set_record_enabled(bool enabled);
     bool is_recording() const { return is_recording_; }
 
 private:
     void load_labels();
-    void create_passthrough_ops(int count);
     void setup_visualization();
     void setup_inference_pipeline();
     void setup_recording_pipeline();
@@ -54,6 +71,7 @@ private:
     // Configuration
     std::string data_path_;
     std::string model_path_;
+    std::string input_path_;
     std::string output_path_;
     std::string output_filename_;
     std::string labels_file_;
@@ -65,6 +83,9 @@ private:
     std::string model_name_;
     std::string model_type_;
     bool record_output_;
+    
+    // Pipeline control state
+    bool pipeline_paused_;
     
     // Label dictionary
     std::map<int, LabelInfo> label_dict_;
@@ -93,9 +114,13 @@ private:
 // Video encoder operator declarations (GXF-based)
 class VideoEncoderRequestOp : public holoscan::ops::GXFCodeletOp {
 public:
-    HOLOSCAN_OPERATOR_FORWARD_ARGS_SUPER(VideoEncoderRequestOp, holoscan::ops::GXFCodeletOp)
+    template<typename ArgT, typename... ArgsT>
+    explicit VideoEncoderRequestOp(ArgT&& arg, ArgsT&&... args)
+        : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoEncoderRequest", 
+                                     std::forward<ArgT>(arg), 
+                                     std::forward<ArgsT>(args)...) {}
     
-    VideoEncoderRequestOp() = default;
+    VideoEncoderRequestOp() : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoEncoderRequest") {}
     
     void setup(holoscan::OperatorSpec& spec) override;
     void compute(holoscan::InputContext&, holoscan::OutputContext&,
@@ -103,25 +128,29 @@ public:
     
 private:
     holoscan::Parameter<std::shared_ptr<holoscan::Resource>> videoencoder_context_;
-    holoscan::Parameter<int32_t> inbuf_storage_type_;
-    holoscan::Parameter<int32_t> codec_;
-    holoscan::Parameter<uint32_t> input_width_;
-    holoscan::Parameter<uint32_t> input_height_;
+    holoscan::Parameter<int64_t> inbuf_storage_type_;
+    holoscan::Parameter<int64_t> codec_;
+    holoscan::Parameter<int64_t> input_width_;
+    holoscan::Parameter<int64_t> input_height_;
     holoscan::Parameter<std::string> input_format_;
-    holoscan::Parameter<int32_t> profile_;
-    holoscan::Parameter<int32_t> bitrate_;
-    holoscan::Parameter<int32_t> framerate_;
+    holoscan::Parameter<int64_t> profile_;
+    holoscan::Parameter<int64_t> bitrate_;
+    holoscan::Parameter<int64_t> framerate_;
     holoscan::Parameter<std::string> config_;
-    holoscan::Parameter<int32_t> rate_control_mode_;
-    holoscan::Parameter<uint32_t> qp_;
-    holoscan::Parameter<int32_t> iframe_interval_;
+    holoscan::Parameter<int64_t> rate_control_mode_;
+    holoscan::Parameter<int64_t> qp_;
+    holoscan::Parameter<int64_t> iframe_interval_;
 };
 
 class VideoEncoderResponseOp : public holoscan::ops::GXFCodeletOp {
 public:
-    HOLOSCAN_OPERATOR_FORWARD_ARGS_SUPER(VideoEncoderResponseOp, holoscan::ops::GXFCodeletOp)
+    template<typename ArgT, typename... ArgsT>
+    explicit VideoEncoderResponseOp(ArgT&& arg, ArgsT&&... args)
+        : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoEncoderResponse", 
+                                     std::forward<ArgT>(arg), 
+                                     std::forward<ArgsT>(args)...) {}
     
-    VideoEncoderResponseOp() = default;
+    VideoEncoderResponseOp() : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoEncoderResponse") {}
     
     void setup(holoscan::OperatorSpec& spec) override;
     void compute(holoscan::InputContext&, holoscan::OutputContext&,
@@ -130,26 +159,27 @@ public:
 private:
     holoscan::Parameter<std::shared_ptr<holoscan::Allocator>> pool_;
     holoscan::Parameter<std::shared_ptr<holoscan::Resource>> videoencoder_context_;
-    holoscan::Parameter<uint32_t> outbuf_storage_type_;
+    holoscan::Parameter<int64_t> outbuf_storage_type_;
 };
 
 class VideoEncoderContext : public holoscan::gxf::GXFResource {
 public:
     HOLOSCAN_RESOURCE_FORWARD_ARGS_SUPER(VideoEncoderContext, holoscan::gxf::GXFResource)
-    
     VideoEncoderContext() = default;
-    
     void setup(holoscan::ComponentSpec& spec) override;
-    
 private:
     holoscan::Parameter<std::shared_ptr<holoscan::AsynchronousCondition>> async_scheduling_term_;
 };
 
 class VideoWriteBitstreamOp : public holoscan::ops::GXFCodeletOp {
 public:
-    HOLOSCAN_OPERATOR_FORWARD_ARGS_SUPER(VideoWriteBitstreamOp, holoscan::ops::GXFCodeletOp)
+    template<typename ArgT, typename... ArgsT>
+    explicit VideoWriteBitstreamOp(ArgT&& arg, ArgsT&&... args)
+        : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoWriteBitstream", 
+                                     std::forward<ArgT>(arg), 
+                                     std::forward<ArgsT>(args)...) {}
     
-    VideoWriteBitstreamOp() = default;
+    VideoWriteBitstreamOp() : holoscan::ops::GXFCodeletOp("nvidia::gxf::VideoWriteBitstream") {}
     
     void setup(holoscan::OperatorSpec& spec) override;
     void compute(holoscan::InputContext&, holoscan::OutputContext&,
@@ -158,9 +188,9 @@ public:
 private:
     holoscan::Parameter<std::string> output_video_path_;
     holoscan::Parameter<std::string> input_crc_file_path_;
-    holoscan::Parameter<int32_t> frame_width_;
-    holoscan::Parameter<int32_t> frame_height_;
-    holoscan::Parameter<int32_t> inbuf_storage_type_;
+    holoscan::Parameter<int64_t> frame_width_;
+    holoscan::Parameter<int64_t> frame_height_;
+    holoscan::Parameter<int64_t> inbuf_storage_type_;
     holoscan::Parameter<std::shared_ptr<holoscan::Allocator>> pool_;
 };
 
@@ -176,6 +206,29 @@ public:
     
 private:
     holoscan::Parameter<std::string> video_format_;
+};
+
+// Simple passthrough operator for headless mode
+class PassthroughOp : public holoscan::Operator {
+public:
+    HOLOSCAN_OPERATOR_FORWARD_ARGS(PassthroughOp)
+
+    PassthroughOp() = default;
+
+    void setup(holoscan::OperatorSpec& spec) override {
+        spec.input<holoscan::TensorMap>("in");
+        spec.output<holoscan::TensorMap>("out");
+    }
+
+    void compute(holoscan::InputContext& op_input, 
+                holoscan::OutputContext& op_output,
+                holoscan::ExecutionContext&) override {
+        auto in_message = op_input.receive<holoscan::TensorMap>("in");
+        if (in_message) {
+            std::cout << "✓ Frame processed successfully in headless mode!" << std::endl;
+            op_output.emit(in_message.value(), "out");
+        }
+    }
 };
 
 } // namespace urology 

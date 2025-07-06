@@ -173,7 +173,7 @@ CMD ["--help"]
 # Stage 3: Development stage (for development work)
 FROM nvcr.io/nvidia/clara-holoscan/holoscan:v3.3.0-dgpu as development
 
-# Install development tools and libraries
+# Install ALL development tools and libraries (預裝所有依賴)
 RUN apt-get update && apt-get install -y \
     # Build tools
     build-essential \
@@ -181,16 +181,25 @@ RUN apt-get update && apt-get install -y \
     ninja-build \
     ccache \
     pkg-config \
-    # Development libraries
-    libyaml-cpp-dev \
+    # Development libraries - 完整 OpenCV 支持
     libopencv-dev \
+    libopencv-core-dev \
+    libopencv-imgproc-dev \
+    libopencv-imgcodecs-dev \
+    libopencv-highgui-dev \
+    libopencv-dnn-dev \
+    libopencv-features2d-dev \
+    libopencv-calib3d-dev \
+    libopencv-video-dev \
+    libopencv-videoio-dev \
+    # 其他開發庫
+    libyaml-cpp-dev \
     libgtest-dev \
     libgmock-dev \
     libbenchmark-dev \
     # Development tools
     gdb \
     valgrind \
-    perf-tools-unstable \
     # Analysis tools
     clang-tidy \
     cppcheck \
@@ -210,13 +219,25 @@ RUN apt-get update && apt-get install -y \
     curl \
     htop \
     tree \
-    # Video processing
+    # Video processing - 完整 FFmpeg 支持
     ffmpeg \
     libavcodec-dev \
     libavformat-dev \
     libavutil-dev \
     libswscale-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    # X11 GUI 支持
+    libx11-dev \
+    libxext-dev \
+    libxrender-dev \
+    libxtst-dev \
+    libgtk-3-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# 驗證 OpenCV 安裝
+RUN pkg-config --modversion opencv4 && \
+    echo "OpenCV $(pkg-config --modversion opencv4) 已預裝完成"
 
 # Set work directory
 WORKDIR /workspace/urology-inference
@@ -233,25 +254,14 @@ ENV ENABLE_TESTING=ON
 ENV ENABLE_BENCHMARKS=ON
 ENV ENABLE_STATIC_ANALYSIS=ON
 
-# Create development user (check if exists first)
-RUN if ! getent group developer > /dev/null 2>&1; then groupadd -r developer; fi && \
-    if ! getent passwd developer > /dev/null 2>&1; then \
-        # Find available UID starting from 1000
-        for uid in $(seq 1000 1100); do \
-            if ! getent passwd $uid > /dev/null 2>&1; then \
-                useradd -r -g developer -u $uid -s /bin/bash -m developer && break; \
-            fi; \
-        done; \
-    fi && \
-    chown -R developer:developer /workspace
-
-# Setup ccache for developer user
+# Setup ccache for faster builds
 ENV PATH="/usr/lib/ccache:${PATH}"
-ENV CCACHE_DIR="/home/developer/.ccache"
+ENV CCACHE_DIR="/tmp/ccache"
 ENV CCACHE_MAXSIZE="2G"
-RUN mkdir -p ${CCACHE_DIR} && chown -R developer:developer ${CCACHE_DIR}
+RUN mkdir -p ${CCACHE_DIR} && chmod 777 ${CCACHE_DIR}
 
-USER developer
+# Install sudo for convenience
+RUN apt-get update && apt-get install -y sudo && rm -rf /var/lib/apt/lists/*
 
 # Set default command for development
 CMD ["/bin/bash"] 

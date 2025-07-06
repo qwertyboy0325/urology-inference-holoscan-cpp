@@ -14,7 +14,7 @@ namespace utils {
 /**
  * @brief Log levels for filtering messages
  */
-enum class LogLevel {
+enum class UrologyLogLevel {
     TRACE = 0,
     DEBUG = 1,
     INFO = 2,
@@ -26,12 +26,12 @@ enum class LogLevel {
 /**
  * @brief High-performance, thread-safe logger with multiple outputs
  */
-class Logger {
+class UrologyLogger {
 public:
     /**
      * @brief Get the global logger instance
      */
-    static Logger& getInstance();
+    static UrologyLogger& getInstance();
     
     /**
      * @brief Initialize logger with configuration
@@ -40,13 +40,13 @@ public:
      * @param console_output Enable console output
      */
     void initialize(const std::string& log_file = "", 
-                   LogLevel level = LogLevel::INFO,
+                   UrologyLogLevel level = UrologyLogLevel::INFO,
                    bool console_output = true);
     
     /**
      * @brief Log a message with specified level
      */
-    void log(LogLevel level, const std::string& message, 
+    void log(UrologyLogLevel level, const std::string& message, 
              const char* file = __builtin_FILE(), 
              int line = __builtin_LINE(),
              const char* func = __builtin_FUNCTION());
@@ -54,12 +54,12 @@ public:
     /**
      * @brief Set minimum log level
      */
-    void setLogLevel(LogLevel level) { min_level_ = level; }
+    void setLogLevel(UrologyLogLevel level) { min_level_ = level; }
     
     /**
      * @brief Get current log level
      */
-    LogLevel getLogLevel() const { return min_level_; }
+    UrologyLogLevel getLogLevel() const { return min_level_; }
     
     /**
      * @brief Enable/disable console output
@@ -79,25 +79,25 @@ public:
     /**
      * @brief Check if a log level is enabled
      */
-    bool isLevelEnabled(LogLevel level) const {
+    bool isLevelEnabled(UrologyLogLevel level) const {
         return level >= min_level_;
     }
 
 private:
-    Logger() = default;
-    ~Logger();
+    UrologyLogger() = default;
+    ~UrologyLogger();
     
-    Logger(const Logger&) = delete;
-    Logger& operator=(const Logger&) = delete;
+    UrologyLogger(const UrologyLogger&) = delete;
+    UrologyLogger& operator=(const UrologyLogger&) = delete;
     
-    std::string formatMessage(LogLevel level, const std::string& message,
+    std::string formatMessage(UrologyLogLevel level, const std::string& message,
                              const char* file, int line, const char* func);
     std::string getCurrentTime();
-    std::string getLogLevelString(LogLevel level);
+    std::string getLogLevelString(UrologyLogLevel level);
     
     std::ofstream file_stream_;
     std::mutex mutex_;
-    LogLevel min_level_ = LogLevel::INFO;
+    UrologyLogLevel min_level_ = UrologyLogLevel::INFO;
     bool console_output_ = true;
     bool file_output_ = false;
     bool initialized_ = false;
@@ -106,10 +106,10 @@ private:
 /**
  * @brief RAII performance timer for logging function execution times
  */
-class PerformanceTimer {
+class UrologyPerformanceTimer {
 public:
-    explicit PerformanceTimer(const std::string& name, LogLevel level = LogLevel::DEBUG);
-    ~PerformanceTimer();
+    explicit UrologyPerformanceTimer(const std::string& name, UrologyLogLevel level = UrologyLogLevel::DEBUG);
+    ~UrologyPerformanceTimer();
     
     /**
      * @brief Get elapsed time in milliseconds
@@ -118,59 +118,59 @@ public:
     
 private:
     std::string name_;
-    LogLevel level_;
+    UrologyLogLevel level_;
     std::chrono::high_resolution_clock::time_point start_time_;
 };
 
 }} // namespace urology::utils
 
-// Convenient logging macros
-#define LOG_TRACE(msg) \
+// Convenient logging macros with UROLOGY_ prefix to avoid conflicts
+#define UROLOGY_LOG_TRACE(msg) \
     do { \
-        if (urology::utils::Logger::getInstance().isLevelEnabled(urology::utils::LogLevel::TRACE)) { \
+        if (urology::utils::UrologyLogger::getInstance().isLevelEnabled(urology::utils::UrologyLogLevel::TRACE)) { \
             std::ostringstream oss; oss << msg; \
-            urology::utils::Logger::getInstance().log(urology::utils::LogLevel::TRACE, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+            urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::TRACE, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
         } \
     } while(0)
 
-#define LOG_DEBUG(msg) \
+#define UROLOGY_LOG_DEBUG(msg) \
     do { \
-        if (urology::utils::Logger::getInstance().isLevelEnabled(urology::utils::LogLevel::DEBUG)) { \
+        if (urology::utils::UrologyLogger::getInstance().isLevelEnabled(urology::utils::UrologyLogLevel::DEBUG)) { \
             std::ostringstream oss; oss << msg; \
-            urology::utils::Logger::getInstance().log(urology::utils::LogLevel::DEBUG, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+            urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::DEBUG, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
         } \
     } while(0)
 
-#define LOG_INFO(msg) \
+#define UROLOGY_LOG_INFO(msg) \
     do { \
-        if (urology::utils::Logger::getInstance().isLevelEnabled(urology::utils::LogLevel::INFO)) { \
+        if (urology::utils::UrologyLogger::getInstance().isLevelEnabled(urology::utils::UrologyLogLevel::INFO)) { \
             std::ostringstream oss; oss << msg; \
-            urology::utils::Logger::getInstance().log(urology::utils::LogLevel::INFO, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+            urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::INFO, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
         } \
     } while(0)
 
-#define LOG_WARN(msg) \
+#define UROLOGY_LOG_WARN(msg) \
     do { \
-        if (urology::utils::Logger::getInstance().isLevelEnabled(urology::utils::LogLevel::WARN)) { \
+        if (urology::utils::UrologyLogger::getInstance().isLevelEnabled(urology::utils::UrologyLogLevel::WARN)) { \
             std::ostringstream oss; oss << msg; \
-            urology::utils::Logger::getInstance().log(urology::utils::LogLevel::WARN, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+            urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::WARN, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
         } \
     } while(0)
 
-#define LOG_ERROR(msg) \
+#define UROLOGY_LOG_ERROR(msg) \
     do { \
-        if (urology::utils::Logger::getInstance().isLevelEnabled(urology::utils::LogLevel::ERROR)) { \
+        if (urology::utils::UrologyLogger::getInstance().isLevelEnabled(urology::utils::UrologyLogLevel::ERROR)) { \
             std::ostringstream oss; oss << msg; \
-            urology::utils::Logger::getInstance().log(urology::utils::LogLevel::ERROR, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+            urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::ERROR, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
         } \
     } while(0)
 
-#define LOG_FATAL(msg) \
+#define UROLOGY_LOG_FATAL(msg) \
     do { \
         std::ostringstream oss; oss << msg; \
-        urology::utils::Logger::getInstance().log(urology::utils::LogLevel::FATAL, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
+        urology::utils::UrologyLogger::getInstance().log(urology::utils::UrologyLogLevel::FATAL, oss.str(), __FILE__, __LINE__, __FUNCTION__); \
     } while(0)
 
 // Performance timing macros
-#define PERF_TIMER(name) urology::utils::PerformanceTimer timer(name)
-#define PERF_TIMER_LEVEL(name, level) urology::utils::PerformanceTimer timer(name, level) 
+#define UROLOGY_PERF_TIMER(name) urology::utils::UrologyPerformanceTimer timer(name)
+#define UROLOGY_PERF_TIMER_LEVEL(name, level) urology::utils::UrologyPerformanceTimer timer(name, level) 
