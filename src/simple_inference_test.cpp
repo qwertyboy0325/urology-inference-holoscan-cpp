@@ -3,6 +3,9 @@
 #include <holoscan/operators/video_stream_replayer/video_stream_replayer.hpp>
 #include <holoscan/operators/format_converter/format_converter.hpp>
 #include <holoscan/operators/inference/inference.hpp>
+#include <holoscan/operators/gxf_codelet/gxf_codelet.hpp>
+#include "operators/yolo_seg_postprocessor.hpp"
+#include <iostream>
 
 using namespace holoscan;
 
@@ -36,15 +39,15 @@ public:
         auto host_memory_pool = make_resource<BlockMemoryPool>(
             "host_memory_pool", 
             Arg("storage_type", 0),
-            Arg("block_size", 128UL * 1024 * 1024),  // 128MB
-            Arg("num_blocks", int64_t(4))
+            Arg("block_size", 256UL * 1024 * 1024),  // 256MB
+            Arg("num_blocks", int64_t(8))
         );
         
         auto device_memory_pool = make_resource<BlockMemoryPool>(
             "device_memory_pool", 
             Arg("storage_type", 1),
-            Arg("block_size", 128UL * 1024 * 1024),  // 128MB
-            Arg("num_blocks", int64_t(4))
+            Arg("block_size", 512UL * 1024 * 1024),  // 512MB
+            Arg("num_blocks", int64_t(8))
         );
         
         auto cuda_stream_pool = make_resource<CudaStreamPool>(
@@ -103,10 +106,19 @@ public:
         // Simple output operator to receive inference results
         auto output_op = make_operator<SinkOp>("output");
         
+        // Add YOLO postprocessor to test our implementation
+        auto yolo_postprocessor = make_operator<urology::YoloSegPostprocessorOp>(
+            "yolo_seg_postprocessor",
+            Arg("scores_threshold", 0.2),
+            Arg("num_class", int64_t(12)),
+            Arg("out_tensor_name", std::string("out_tensor"))
+        );
+        
         // Connect pipeline
         add_flow(replayer, format_converter, {{"output", "source_video"}});
         add_flow(format_converter, inference, {{"tensor", "receivers"}});
-        add_flow(inference, output_op, {{"transmitter", "in"}});
+        add_flow(inference, yolo_postprocessor, {{"transmitter", "in"}});
+        add_flow(yolo_postprocessor, output_op, {{"out", "in"}});
         
         std::cout << "Simple inference pipeline setup completed!" << std::endl;
     }

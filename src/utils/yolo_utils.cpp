@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <holoscan/core/domain/tensor.hpp>
+#include <dlpack/dlpack.h>
+#include <cstring>
 
 namespace urology {
 namespace yolo_utils {
@@ -238,6 +241,29 @@ std::vector<float> resize_mask(
     }
     
     return resized_mask;
+}
+
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_from_data(
+    void* data, const std::vector<int64_t>& shape, int dtype_code, int dtype_bits, int dtype_lanes) {
+    // Allocate and fill DLTensor
+    auto* dl_managed_tensor = new DLManagedTensor();
+    dl_managed_tensor->dl_tensor.data = data;
+    dl_managed_tensor->dl_tensor.device = DLDevice{ kDLCPU, 0 };
+    dl_managed_tensor->dl_tensor.ndim = static_cast<int>(shape.size());
+    dl_managed_tensor->dl_tensor.dtype = DLDataType{ static_cast<uint8_t>(dtype_code), static_cast<uint8_t>(dtype_bits), static_cast<uint16_t>(dtype_lanes) };
+    dl_managed_tensor->dl_tensor.shape = new int64_t[shape.size()];
+    std::memcpy(dl_managed_tensor->dl_tensor.shape, shape.data(), shape.size() * sizeof(int64_t));
+    dl_managed_tensor->dl_tensor.strides = nullptr;
+    dl_managed_tensor->dl_tensor.byte_offset = 0;
+    dl_managed_tensor->manager_ctx = nullptr;
+    dl_managed_tensor->deleter = [](DLManagedTensor* self) {
+        delete[] self->dl_tensor.shape;
+        delete self;
+    };
+
+    // Wrap in Holoscan Tensor
+    auto tensor = std::make_shared<holoscan::Tensor>(dl_managed_tensor);
+    return tensor;
 }
 
 } // namespace yolo_utils

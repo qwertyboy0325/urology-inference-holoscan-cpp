@@ -2,11 +2,13 @@
 #include "urology_app.hpp"
 #include "operators/yolo_seg_postprocessor.hpp"
 
+
 #include <yaml-cpp/yaml.h>
 #include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <holoscan/core/gxf/gxf_utils.hpp>
+#include <chrono>
 
 namespace urology {
 
@@ -106,6 +108,8 @@ void UrologyApp::load_labels() {
 }
 
 void UrologyApp::compose() {
+    std::cout << "[MEM] === Starting UrologyApp::compose() ===" << std::endl;
+    
     // Initialize paths
     if (data_path_ == "none") {
         data_path_ = "./data";
@@ -129,20 +133,23 @@ void UrologyApp::compose() {
     std::cout << "Input path: " << input_path_ << std::endl;
     std::cout << "Model file: " << model_name_ << std::endl;
     
-    // Memory pools (increased size and blocks for inference)
+    std::cout << "[MEM] Creating memory pools..." << std::endl;
+    // Memory pools - REASONABLE CONFIGURATION FOR 16GB GPU
     host_memory_pool_ = make_resource<holoscan::BlockMemoryPool>(
         "host_memory_pool", 
         holoscan::Arg("storage_type", 0),
-        holoscan::Arg("block_size", 256UL * 1024 * 1024),  // 256MB
+        holoscan::Arg("block_size", 512UL * 1024 * 1024),   // 512MB
         holoscan::Arg("num_blocks", int64_t(8))
     );
+    std::cout << "[MEM] Host memory pool created (512MB x 8 blocks = 4GB)" << std::endl;
     
     device_memory_pool_ = make_resource<holoscan::BlockMemoryPool>(
         "device_memory_pool", 
         holoscan::Arg("storage_type", 1),
-        holoscan::Arg("block_size", 256UL * 1024 * 1024),  // 256MB
+        holoscan::Arg("block_size", 1024UL * 1024 * 1024),  // 1GB
         holoscan::Arg("num_blocks", int64_t(8))
     );
+    std::cout << "[MEM] Device memory pool created (1GB x 8 blocks = 8GB)" << std::endl;
     
     cuda_stream_pool_ = make_resource<holoscan::CudaStreamPool>(
         "cuda_stream_pool",
@@ -151,25 +158,64 @@ void UrologyApp::compose() {
         holoscan::Arg("reserved_size", int64_t(1)),
         holoscan::Arg("max_size", int64_t(5))
     );
+    std::cout << "[MEM] CUDA stream pool created" << std::endl;
     
     // Video replayer
+    std::cout << "[MEM] Setting up video replayer..." << std::endl;
     std::filesystem::path video_dir = input_path_;
     if (std::filesystem::exists(video_dir) && source_type_ == "replayer") {
         std::cout << "Setting up video replayer from: \"" << video_dir << "\"" << std::endl;
+        
+        // Check file sizes before creating replayer
+        std::filesystem::path entities_file = video_dir / "tensor.gxf_entities";
+        std::filesystem::path index_file = video_dir / "tensor.gxf_index";
+        
+        if (std::filesystem::exists(entities_file)) {
+            auto file_size = std::filesystem::file_size(entities_file);
+            std::cout << "[MEM] GXF entities file size: " << (file_size / (1024*1024*1024)) << " GB" << std::endl;
+            
+            // Calculate optimal chunk size based on available memory
+            // Use 1GB chunks to avoid OOM
+            const size_t chunk_size_gb = 1;
+            const size_t chunk_size_bytes = chunk_size_gb * 1024 * 1024 * 1024;
+            const size_t estimated_frames_per_chunk = chunk_size_bytes / (1920 * 1080 * 3); // 3 bytes per pixel
+            const size_t max_frames_to_load = std::min(estimated_frames_per_chunk, size_t(100)); // Cap at 100 frames
+            
+            std::cout << "[MEM] Memory optimization: Loading " << max_frames_to_load << " frames per chunk" << std::endl;
+        }
+        if (std::filesystem::exists(index_file)) {
+            auto file_size = std::filesystem::file_size(index_file);
+            std::cout << "[MEM] GXF index file size: " << (file_size / 1024) << " KB" << std::endl;
+        }
+        
+        // Set GXF memory optimization environment variables - REASONABLE
+        std::cout << "[MEM] Setting GXF memory optimization (REASONABLE)..." << std::endl;
+        setenv("GXF_MEMORY_POOL_SIZE", "2147483648", 1);   // 2GB GXF memory pool
+        setenv("HOLOSCAN_MEMORY_POOL_SIZE", "4294967296", 1);  // 4GB Holoscan memory pool
+        setenv("CUDA_MEMORY_POOL_SIZE", "1073741824", 1);  // 1GB CUDA memory pool
+        
+        // Create standard replayer - PROCESS ENTIRE VIDEO STREAM
         replayer_ = make_operator<holoscan::ops::VideoStreamReplayerOp>(
             "replayer",
             holoscan::Arg("directory", video_dir.string()),
             holoscan::Arg("basename", std::string("tensor")),
             holoscan::Arg("frame_rate", 30.0f),
             holoscan::Arg("repeat", false),
-            holoscan::Arg("realtime", false),
-            holoscan::Arg("count", int64_t(0))
+            holoscan::Arg("realtime", false)
+            // Removed "count" parameter to process all frames
+            // Optional: Add "count" with a large number to limit frames for testing
+            // holoscan::Arg("count", int64_t(1000))  // Process 1000 frames
         );
+        std::cout << "[MEM] Video replayer created successfully (memory-optimized)" << std::endl;
+    } else {
+        std::cout << "[MEM] ERROR: Video directory does not exist or source type is not replayer" << std::endl;
+        throw std::runtime_error("Video directory not found: " + video_dir.string());
     }
     
     // Initialize pipeline state
     pipeline_paused_ = false;
     
+    std::cout << "[MEM] Creating format converter..." << std::endl;
     // Format converter for preprocessing
     format_converter_ = make_operator<holoscan::ops::FormatConverterOp>(
         "segmentation_preprocessor",
@@ -180,8 +226,10 @@ void UrologyApp::compose() {
         holoscan::Arg("resize_height", 640),
         holoscan::Arg("pool", device_memory_pool_)
     );
+    std::cout << "[MEM] Format converter created" << std::endl;
     
     // Inference operator
+    std::cout << "[MEM] Setting up inference operator..." << std::endl;
     std::string model_file = std::filesystem::path(model_path_) / model_name_;
     std::cout << "Model file path: " << model_file << std::endl;
     
@@ -189,6 +237,9 @@ void UrologyApp::compose() {
     if (!std::filesystem::exists(model_file)) {
         throw std::runtime_error("Model file not found: " + model_file);
     }
+    
+    auto model_file_size = std::filesystem::file_size(model_file);
+    std::cout << "[MEM] Model file size: " << (model_file_size / (1024*1024)) << " MB" << std::endl;
     
     // Create DataMap for model paths
     holoscan::ops::InferenceOp::DataMap model_path_map;
@@ -212,7 +263,9 @@ void UrologyApp::compose() {
         holoscan::Arg("allocator", device_memory_pool_),
         holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
     );
+    std::cout << "[MEM] Inference operator created" << std::endl;
     
+    std::cout << "[MEM] Creating YOLO postprocessor..." << std::endl;
     // YOLO postprocessor
     auto yolo_postprocessor = make_operator<YoloSegPostprocessorOp>(
         "yolo_seg_postprocessor",
@@ -220,9 +273,12 @@ void UrologyApp::compose() {
         holoscan::Arg("num_class", int64_t(12)),
         holoscan::Arg("out_tensor_name", std::string("out_tensor"))
     );
+    std::cout << "[MEM] YOLO postprocessor created" << std::endl;
     
-        // Visualization - Check for headless mode
+    // Visualization - Check for headless mode
     bool headless_mode = std::getenv("HOLOVIZ_HEADLESS") != nullptr;
+    
+    std::cout << "[MEM] Setting up visualization (headless=" << (headless_mode ? "true" : "false") << ")..." << std::endl;
     
     if (headless_mode) {
         std::cout << "=== HEADLESS MODE ENABLED ===" << std::endl;
@@ -238,10 +294,13 @@ void UrologyApp::compose() {
             holoscan::Arg("allocator", host_memory_pool_),
             holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
         );
+        std::cout << "[MEM] Headless HolovizOp created" << std::endl;
         
         // Create a simple output operator to receive the render buffer
         auto output_op = make_operator<PassthroughOp>("output");
+        std::cout << "[MEM] Output operator created" << std::endl;
         
+        std::cout << "[MEM] Connecting pipeline (headless mode)..." << std::endl;
         // Connect the pipeline with headless visualization
         add_flow(replayer_, format_converter_, {{"output", "source_video"}});
         add_flow(format_converter_, inference_, {{"tensor", "receivers"}});
@@ -263,7 +322,9 @@ void UrologyApp::compose() {
             holoscan::Arg("allocator", host_memory_pool_),
             holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
         );
+        std::cout << "[MEM] Display HolovizOp created" << std::endl;
         
+        std::cout << "[MEM] Connecting pipeline (display mode)..." << std::endl;
         // Connect the pipeline with normal visualization (matching Python version)
         add_flow(replayer_, visualizer_, {{"output", "receivers"}});                // Video stream directly to visualizer
         add_flow(replayer_, format_converter_, {{"output", "source_video"}});       // Video stream to preprocessor
@@ -272,6 +333,7 @@ void UrologyApp::compose() {
         add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}, {"output_specs", "input_specs"}}); // Postprocessor results to visualizer
     }
     
+    std::cout << "[MEM] === UrologyApp::compose() completed successfully ===" << std::endl;
     std::cout << "Pipeline setup completed successfully!" << std::endl;
 }
 

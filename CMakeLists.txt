@@ -19,14 +19,21 @@ find_package(holoscan REQUIRED CONFIG
     PATHS "/opt/nvidia/holoscan"
 )
 
-find_package(OpenCV REQUIRED)
-find_package(PkgConfig REQUIRED)
+# Make OpenCV optional since it's not available in Holoscan container
+find_package(OpenCV QUIET)
+find_package(PkgConfig QUIET)
 find_package(Threads REQUIRED)
 find_package(yaml-cpp QUIET)
 
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${OpenCV_INCLUDE_DIRS})
+if(OpenCV_FOUND)
+    include_directories(${OpenCV_INCLUDE_DIRS})
+    message(STATUS "OpenCV found: ${OpenCV_VERSION}")
+else()
+    message(STATUS "OpenCV not found - cv_utils will be disabled")
+    add_definitions(-DDISABLE_OPENCV)
+endif()
 
 # Collect source files
 file(GLOB_RECURSE SOURCE_FILES
@@ -41,6 +48,8 @@ list(FILTER SOURCE_FILES EXCLUDE REGEX ".*hello_world\\.cpp$")
 list(FILTER SOURCE_FILES EXCLUDE REGEX ".*simple_minimal_app\\.cpp$")
 list(FILTER SOURCE_FILES EXCLUDE REGEX ".*simple_test\\.cpp$")
 list(FILTER SOURCE_FILES EXCLUDE REGEX ".*simple_inference_test\\.cpp$")
+list(FILTER SOURCE_FILES EXCLUDE REGEX ".*test_without_postprocessor\\.cpp$")
+list(FILTER SOURCE_FILES EXCLUDE REGEX ".*test_postprocessor_only\\.cpp$")
 
 # Main executable
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
@@ -52,7 +61,35 @@ add_executable(minimal_urology_app src/simple_minimal_app.cpp)
 add_executable(hello_world src/hello_world.cpp)
 
 # Simple inference test (no HolovizOp)
-add_executable(simple_inference_test src/simple_inference_test.cpp)
+add_executable(simple_inference_test 
+    src/simple_inference_test.cpp
+    src/operators/yolo_seg_postprocessor.cpp
+    src/operators/yolo_seg_postprocessor.cu
+    src/utils/yolo_utils.cpp
+    src/utils/logger.cpp
+    src/utils/error_handler.cpp
+    src/utils/performance_monitor.cpp
+    src/utils/gxf_state_monitor.cpp
+    src/utils/cv_utils.cpp
+)
+
+# Test without postprocessor
+add_executable(test_without_postprocessor 
+    src/test_without_postprocessor.cpp
+)
+
+# Test postprocessor only (no HolovizOp)
+add_executable(test_postprocessor_only 
+    src/test_postprocessor_only.cpp
+    src/operators/yolo_seg_postprocessor.cpp
+    src/operators/yolo_seg_postprocessor.cu
+    src/utils/yolo_utils.cpp
+    src/utils/logger.cpp
+    src/utils/error_handler.cpp
+    src/utils/performance_monitor.cpp
+    src/utils/gxf_state_monitor.cpp
+    src/utils/cv_utils.cpp
+)
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
@@ -62,11 +99,15 @@ target_link_libraries(${PROJECT_NAME}
     holoscan::ops::inference
     holoscan::ops::holoviz
     holoscan::ops::gxf_codelet
-    ${OpenCV_LIBS}
     Threads::Threads
     CUDA::cudart
     CUDA::cuda_driver
 )
+
+# Link OpenCV if found
+if(OpenCV_FOUND)
+    target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
+endif()
 
 # Link libraries for minimal app
 target_link_libraries(minimal_urology_app
@@ -82,7 +123,34 @@ target_link_libraries(simple_inference_test
     holoscan::ops::format_converter
     holoscan::ops::inference
     holoscan::ops::gxf_codelet
+    holoscan::ops::holoviz
     ${OpenCV_LIBS}
+    CUDA::cudart
+    CUDA::cuda_driver
+)
+
+# Link libraries for test without postprocessor
+target_link_libraries(test_without_postprocessor
+    holoscan::core
+    holoscan::ops::video_stream_replayer
+    holoscan::ops::format_converter
+    holoscan::ops::inference
+    holoscan::ops::holoviz
+    CUDA::cudart
+    CUDA::cuda_driver
+)
+
+# Link libraries for test postprocessor only
+target_link_libraries(test_postprocessor_only
+    holoscan::core
+    holoscan::ops::video_stream_replayer
+    holoscan::ops::format_converter
+    holoscan::ops::inference
+    holoscan::ops::holoviz
+    holoscan::ops::gxf_codelet
+    ${OpenCV_LIBS}
+    CUDA::cudart
+    CUDA::cuda_driver
 )
 
 # Add yaml-cpp if found

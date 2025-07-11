@@ -19,7 +19,7 @@ __global__ void yolo_postprocess_kernel(
     // Calculate offset for this detection
     int offset = idx * feature_size;
     
-    // Extract basic features
+    // Extract basic features (using coalesced memory access)
     float x = predictions[offset + 0];
     float y = predictions[offset + 1];
     float w = predictions[offset + 2];
@@ -27,24 +27,24 @@ __global__ void yolo_postprocess_kernel(
     float confidence = predictions[offset + 4];
     float class_id_float = predictions[offset + 5];
     
-    // Validate class_id
+    // Early exit for invalid detections
     int class_id = static_cast<int>(class_id_float);
-    if (class_id < 0 || class_id >= num_classes) {
+    if (class_id < 0 || class_id >= num_classes || confidence < confidence_threshold) {
         valid_detections[idx] = 0;
         return;
     }
     
-    // Apply confidence threshold
-    if (confidence < confidence_threshold) {
+    // Convert to xyxy format (clamp to valid range)
+    float x1 = fmaxf(0.0f, x - w / 2.0f);
+    float y1 = fmaxf(0.0f, y - h / 2.0f);
+    float x2 = fminf(1.0f, x + w / 2.0f);
+    float y2 = fminf(1.0f, y + h / 2.0f);
+    
+    // Validate box dimensions
+    if (x2 <= x1 || y2 <= y1) {
         valid_detections[idx] = 0;
         return;
     }
-    
-    // Convert to xyxy format
-    float x1 = x - w / 2.0f;
-    float y1 = y - h / 2.0f;
-    float x2 = x + w / 2.0f;
-    float y2 = y + h / 2.0f;
     
     // Store results
     output_boxes[idx * 4 + 0] = x1;
@@ -56,7 +56,7 @@ __global__ void yolo_postprocess_kernel(
     valid_detections[idx] = 1;
 }
 
-// CUDA kernel for Non-Maximum Suppression
+// CUDA kernel for Non-Maximum Suppression (optimized)
 __global__ void nms_kernel(
     const float* boxes,
     const float* scores,
@@ -78,6 +78,9 @@ __global__ void nms_kernel(
     float score_i = scores[idx];
     int class_i = class_ids[idx];
     
+    // Calculate area_i once
+    float area_i = (x2_i - x1_i) * (y2_i - y1_i);
+    
     // Compare with all other detections
     for (int j = idx + 1; j < num_detections; ++j) {
         if (keep_flags[j] == 0) continue; // Already suppressed
@@ -89,16 +92,21 @@ __global__ void nms_kernel(
         float y2_j = boxes[j * 4 + 3];
         float score_j = scores[j];
         
-        // Calculate IoU
+        // Calculate IoU (optimized)
         float x1_inter = fmaxf(x1_i, x1_j);
         float y1_inter = fmaxf(y1_i, y1_j);
         float x2_inter = fminf(x2_i, x2_j);
         float y2_inter = fminf(y2_i, y2_j);
         
-        float inter_area = fmaxf(0.0f, x2_inter - x1_inter) * fmaxf(0.0f, y2_inter - y1_inter);
-        float area_i = (x2_i - x1_i) * (y2_i - y1_i);
+        // Early exit if no overlap
+        if (x2_inter <= x1_inter || y2_inter <= y1_inter) continue;
+        
+        float inter_area = (x2_inter - x1_inter) * (y2_inter - y1_inter);
         float area_j = (x2_j - x1_j) * (y2_j - y1_j);
         float union_area = area_i + area_j - inter_area;
+        
+        // Avoid division by zero
+        if (union_area <= 0.0f) continue;
         
         float iou = inter_area / union_area;
         

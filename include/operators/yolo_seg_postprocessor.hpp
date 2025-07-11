@@ -28,7 +28,8 @@ class YoloSegPostprocessorOp : public holoscan::Operator {
 public:
     HOLOSCAN_OPERATOR_FORWARD_ARGS(YoloSegPostprocessorOp)
 
-    YoloSegPostprocessorOp() = default;
+    YoloSegPostprocessorOp();
+    virtual ~YoloSegPostprocessorOp();
 
     void setup(holoscan::OperatorSpec& spec) override;
     void compute(holoscan::InputContext& op_input, 

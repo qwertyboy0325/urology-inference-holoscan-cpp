@@ -60,4 +60,4 @@ Thumbs.db
 *.backup
 
 # Core dumps
-core.* 
+core.* urology-inference-holoscan-py/

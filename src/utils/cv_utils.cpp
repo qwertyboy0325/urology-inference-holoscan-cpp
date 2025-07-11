@@ -1,6 +1,10 @@
 #include "holoscan_fix.hpp"
 #include "utils/cv_utils.hpp"
+
+#ifndef DISABLE_OPENCV
 #include <opencv2/opencv.hpp>
+#endif
+
 #include <gxf/std/tensor.hpp>
 #include <vector>
 #include <iostream>
@@ -10,6 +14,7 @@ namespace cv_utils {
 
 // Convert Holoscan tensor to OpenCV Mat
 cv::Mat tensor_to_mat(const std::shared_ptr<nvidia::gxf::Tensor>& tensor) {
+#ifndef DISABLE_OPENCV
     if (!tensor) {
         return cv::Mat();
     }
@@ -17,10 +22,15 @@ cv::Mat tensor_to_mat(const std::shared_ptr<nvidia::gxf::Tensor>& tensor) {
     // TODO: Implement tensor to Mat conversion for GXF Tensor
     // This requires understanding the GXF Tensor API
     return cv::Mat();
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // Convert OpenCV Mat to Holoscan tensor
 std::shared_ptr<nvidia::gxf::Tensor> mat_to_tensor(const cv::Mat& mat, const std::string& name) {
+#ifndef DISABLE_OPENCV
     if (mat.empty()) {
         return nullptr;
     }
@@ -28,10 +38,15 @@ std::shared_ptr<nvidia::gxf::Tensor> mat_to_tensor(const cv::Mat& mat, const std
     // TODO: Implement Mat to tensor conversion for GXF Tensor
     // This requires understanding the GXF Tensor API
     return nullptr;
+#else
+    // Return nullptr when OpenCV is disabled
+    return nullptr;
+#endif
 }
 
 // Resize image while maintaining aspect ratio
 cv::Mat resize_with_aspect_ratio(const cv::Mat& img, int target_width, int target_height) {
+#ifndef DISABLE_OPENCV
     if (img.empty()) {
         return cv::Mat();
     }
@@ -58,10 +73,15 @@ cv::Mat resize_with_aspect_ratio(const cv::Mat& img, int target_width, int targe
     
     resized.copyTo(result(cv::Rect(x_offset, y_offset, new_width, new_height)));
     return result;
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // Apply colormap to mask
 cv::Mat apply_colormap(const cv::Mat& mask, const std::vector<int>& colors) {
+#ifndef DISABLE_OPENCV
     cv::Mat colored_mask = cv::Mat::zeros(mask.size(), CV_8UC3);
     
     for (int y = 0; y < mask.rows; ++y) {
@@ -79,10 +99,15 @@ cv::Mat apply_colormap(const cv::Mat& mask, const std::vector<int>& colors) {
     }
     
     return colored_mask;
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // Generate colors for different classes
 std::vector<cv::Scalar> generate_colors(int num_classes) {
+#ifndef DISABLE_OPENCV
     std::vector<cv::Scalar> colors;
     for (int i = 0; i < num_classes; ++i) {
         int hue = (i * 180 / num_classes) % 180;
@@ -93,6 +118,10 @@ std::vector<cv::Scalar> generate_colors(int num_classes) {
         colors.emplace_back(color_vec[0], color_vec[1], color_vec[2]);
     }
     return colors;
+#else
+    // Return empty vector when OpenCV is disabled
+    return std::vector<cv::Scalar>();
+#endif
 }
 
 // Draw bounding boxes
@@ -102,6 +131,7 @@ void draw_boxes(cv::Mat& image,
                const std::vector<float>& scores,
                const std::vector<std::string>& class_names,
                const std::vector<cv::Scalar>& colors) {
+#ifndef DISABLE_OPENCV
     
     for (size_t i = 0; i < boxes.size(); ++i) {
         const auto& box = boxes[i];
@@ -124,6 +154,7 @@ void draw_boxes(cv::Mat& image,
                      color, cv::FILLED);
         cv::putText(image, label, text_origin, cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar::all(255), 1);
     }
+#endif
 }
 
 // Draw segmentation masks
@@ -132,6 +163,7 @@ void draw_segmentation_masks(cv::Mat& image,
                            const std::vector<int>& class_ids,
                            const std::vector<cv::Scalar>& colors,
                            float alpha) {
+#ifndef DISABLE_OPENCV
     for (size_t i = 0; i < masks.size(); ++i) {
         const auto& mask = masks[i];
         cv::Scalar color = (class_ids[i] < colors.size() ? colors[class_ids[i]] : cv::Scalar(0, 255, 0));
@@ -143,34 +175,51 @@ void draw_segmentation_masks(cv::Mat& image,
         
         cv::addWeighted(image, 1.0 - alpha, colored_mask, alpha, 0, image);
     }
+#endif
 }
 
 // Create overlay
 cv::Mat create_overlay(const cv::Mat& image, const cv::Mat& mask, const cv::Scalar& color, float alpha) {
+#ifndef DISABLE_OPENCV
     cv::Mat overlay = image.clone();
     cv::Mat colored_mask = cv::Mat::zeros(image.size(), CV_8UC3);
     colored_mask.setTo(color, mask);
     cv::addWeighted(overlay, 1.0 - alpha, colored_mask, alpha, 0, overlay);
     return overlay;
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // BGR to RGB conversion
 cv::Mat bgr_to_rgb(const cv::Mat& bgr_image) {
+#ifndef DISABLE_OPENCV
     cv::Mat rgb_image;
     cv::cvtColor(bgr_image, rgb_image, cv::COLOR_BGR2RGB);
     return rgb_image;
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // RGB to BGR conversion
 cv::Mat rgb_to_bgr(const cv::Mat& rgb_image) {
+#ifndef DISABLE_OPENCV
     cv::Mat bgr_image;
     cv::cvtColor(rgb_image, bgr_image, cv::COLOR_RGB2BGR);
     return bgr_image;
+#else
+    // Return empty mat when OpenCV is disabled
+    return cv::Mat();
+#endif
 }
 
 // Overlay mask on raw image data
 void overlay_mask(std::vector<uint8_t>& image_data, int width, int height,
                  const std::vector<float>& mask, const std::vector<float>& color, float alpha) {
+#ifndef DISABLE_OPENCV
     if (mask.size() != width * height) {
         std::cerr << "Mask size doesn't match image dimensions" << std::endl;
         return;
@@ -194,12 +243,14 @@ void overlay_mask(std::vector<uint8_t>& image_data, int width, int height,
             }
         }
     }
+#endif
 }
 
 // Simple image processing utilities without OpenCV dependency
 std::vector<uint8_t> resize_image(const std::vector<uint8_t>& image, 
                                   int src_width, int src_height,
                                   int dst_width, int dst_height) {
+#ifndef DISABLE_OPENCV
     std::vector<uint8_t> resized(dst_width * dst_height * 3);
     
     // Simple nearest neighbor interpolation
@@ -225,15 +276,24 @@ std::vector<uint8_t> resize_image(const std::vector<uint8_t>& image,
     }
     
     return resized;
+#else
+    // Return empty vector when OpenCV is disabled
+    return std::vector<uint8_t>();
+#endif
 }
 
 // Normalize image pixels
 std::vector<float> normalize_image(const std::vector<uint8_t>& image) {
+#ifndef DISABLE_OPENCV
     std::vector<float> normalized(image.size());
     for (size_t i = 0; i < image.size(); ++i) {
         normalized[i] = static_cast<float>(image[i]) / 255.0f;
     }
     return normalized;
+#else
+    // Return empty vector when OpenCV is disabled
+    return std::vector<float>();
+#endif
 }
 
 } // namespace cv_utils

@@ -4,13 +4,26 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <array>
 
 // Forward declarations for OpenCV types
+#ifndef DISABLE_OPENCV
 namespace cv {
     class Mat;
     template<typename _Tp> class Scalar_;
     typedef Scalar_<double> Scalar;
 }
+#else
+// Define minimal cv::Mat when OpenCV is disabled
+namespace cv {
+    class Mat {
+    public:
+        Mat() = default;
+        bool empty() const { return true; }
+    };
+    typedef std::array<double, 4> Scalar;
+}
+#endif
 
 // Forward declarations for GXF types
 namespace nvidia {

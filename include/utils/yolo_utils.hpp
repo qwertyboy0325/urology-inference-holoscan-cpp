@@ -52,5 +52,8 @@ std::vector<float> resize_mask(
     int src_width, int src_height,
     int dst_width, int dst_height);
 
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_from_data(
+    void* data, const std::vector<int64_t>& shape, int dtype_code, int dtype_bits, int dtype_lanes);
+
 } // namespace yolo_utils
 } // namespace urology 

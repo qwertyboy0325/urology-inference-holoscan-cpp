@@ -4,9 +4,20 @@
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <chrono>
+#include <sys/resource.h>
 
 namespace {
     std::atomic<bool> should_quit{false};
+    
+    // Function to get current memory usage
+    void log_memory_usage(const std::string& phase) {
+        struct rusage r_usage;
+        if (getrusage(RUSAGE_SELF, &r_usage) == 0) {
+            long memory_kb = r_usage.ru_maxrss;
+            std::cout << "[MEM] " << phase << " - Memory usage: " << (memory_kb / 1024) << " MB" << std::endl;
+        }
+    }
     
     void keyboard_handler(urology::UrologyApp* app) {
         char key;
@@ -36,6 +47,10 @@ namespace {
 }
 
 int main(int argc, char** argv) {
+    std::cout << "[MEM] === Starting Urology Inference Application ===" << std::endl;
+    std::cout << "[MEM] Application entry point reached" << std::endl;
+    log_memory_usage("Application start");
+    
     // Parse command line arguments
     std::string data_path = "none";
     std::string source = "replayer";
@@ -73,32 +88,65 @@ int main(int argc, char** argv) {
         }
     }
     
+    std::cout << "[MEM] Command line arguments parsed" << std::endl;
+    std::cout << "Data path: " << data_path << std::endl;
+    std::cout << "Source: " << source << std::endl;
+    log_memory_usage("After argument parsing");
+    
     try {
+        std::cout << "[MEM] Creating UrologyApp instance..." << std::endl;
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
         auto app = std::make_shared<urology::UrologyApp>(
             data_path, source, output_filename, labels_file);
         
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        std::cout << "[MEM] UrologyApp instance created in " << duration.count() << " ms" << std::endl;
+        log_memory_usage("After UrologyApp creation");
+        
         // Initialize Holoscan
+        std::cout << "[MEM] Initializing Holoscan..." << std::endl;
+        start_time = std::chrono::high_resolution_clock::now();
+        
         holoscan::set_log_level(holoscan::LogLevel::INFO);
         
-        std::cout << "Starting Urology Inference Holoscan Application..." << std::endl;
-        std::cout << "Data path: " << data_path << std::endl;
-        std::cout << "Source: " << source << std::endl;
+        end_time = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        std::cout << "[MEM] Holoscan initialized in " << duration.count() << " ms" << std::endl;
+        log_memory_usage("After Holoscan initialization");
         
-        // Start keyboard control in separate thread
-        std::thread keyboard_thread(keyboard_handler, app.get());
+        std::cout << "Starting Urology Inference Holoscan Application..." << std::endl;
+        
+        // TEMPORARILY DISABLE KEYBOARD HANDLER TO PREVENT INFINITE LOOP
+        // std::cout << "[MEM] Starting keyboard control thread..." << std::endl;
+        // std::thread keyboard_thread(keyboard_handler, app.get());
         
         // Run the application
+        std::cout << "[MEM] Starting application run..." << std::endl;
+        start_time = std::chrono::high_resolution_clock::now();
+        log_memory_usage("Before app->run()");
+        
         app->run();
         
+        end_time = std::chrono::high_resolution_clock::now();
+        duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        std::cout << "[MEM] Application run completed in " << duration.count() << " ms" << std::endl;
+        log_memory_usage("After app->run()");
+        
         should_quit.store(true);
-        if (keyboard_thread.joinable()) {
-            keyboard_thread.join();
-    }
+        // if (keyboard_thread.joinable()) {
+        //     keyboard_thread.join();
+        // }
     
+        std::cout << "[MEM] === Application completed successfully ===" << std::endl;
+        log_memory_usage("Application end");
         std::cout << "Application completed successfully" << std::endl;
-    return 0;
+        return 0;
         
     } catch (const std::exception& ex) {
+        std::cerr << "[MEM] === Application failed with exception ===" << std::endl;
+        log_memory_usage("After exception");
         std::cerr << "Application failed: " << ex.what() << std::endl;
         return -1;
     }

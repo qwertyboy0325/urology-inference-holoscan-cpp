@@ -11,8 +11,30 @@
 #include <numeric>
 #include <dlpack/dlpack.h>
 #include <memory>
+#include <chrono>
+#include <sys/resource.h>
 
 namespace urology {
+
+// Function to get current memory usage
+void log_memory_usage(const std::string& phase) {
+    struct rusage r_usage;
+    if (getrusage(RUSAGE_SELF, &r_usage) == 0) {
+        long memory_kb = r_usage.ru_maxrss;
+        std::cout << "[POSTPROC] " << phase << " - Memory usage: " << (memory_kb / 1024) << " MB" << std::endl;
+    }
+}
+
+// Constructor and destructor logging
+YoloSegPostprocessorOp::YoloSegPostprocessorOp() {
+    std::cout << "[POSTPROC] === YoloSegPostprocessorOp constructor called ===" << std::endl;
+    log_memory_usage("Postprocessor constructor");
+}
+
+YoloSegPostprocessorOp::~YoloSegPostprocessorOp() {
+    std::cout << "[POSTPROC] === YoloSegPostprocessorOp destructor called ===" << std::endl;
+    log_memory_usage("Postprocessor destructor");
+}
 
 // External CUDA kernel declarations
 extern "C" {
@@ -41,26 +63,48 @@ extern "C" {
 }
 
 void YoloSegPostprocessorOp::setup(holoscan::OperatorSpec& spec) {
-    spec.input<holoscan::TensorMap>("in");
-    spec.output<holoscan::TensorMap>("out");
-    spec.output<std::vector<holoscan::ops::HolovizOp::InputSpec>>("output_specs");
-    spec.param(scores_threshold_, "scores_threshold", "Scores threshold");
-    spec.param(num_class_, "num_class", "Number of classes");
-    spec.param(out_tensor_name_, "out_tensor_name", "Output tensor name");
+    std::cout << "[POSTPROC] === Starting YoloSegPostprocessorOp::setup() ===" << std::endl;
+    log_memory_usage("Postprocessor setup start");
+    
+    try {
+        std::cout << "[POSTPROC] Setting up input/output specifications..." << std::endl;
+        spec.input<holoscan::TensorMap>("in");
+        spec.output<holoscan::TensorMap>("out");
+        spec.output<std::vector<holoscan::ops::HolovizOp::InputSpec>>("output_specs");
+        
+        std::cout << "[POSTPROC] Setting up parameters..." << std::endl;
+        spec.param(scores_threshold_, "scores_threshold", "Scores threshold");
+        spec.param(num_class_, "num_class", "Number of classes");
+        spec.param(out_tensor_name_, "out_tensor_name", "Output tensor name");
+        
+        std::cout << "[POSTPROC] Setup completed successfully" << std::endl;
+        log_memory_usage("Postprocessor setup end");
+    } catch (const std::exception& e) {
+        std::cerr << "[POSTPROC] ERROR in setup: " << e.what() << std::endl;
+        throw;
+    }
 }
 
 void YoloSegPostprocessorOp::compute(holoscan::InputContext& op_input, 
                                     holoscan::OutputContext& op_output,
                                     holoscan::ExecutionContext& /* context */) {
+    std::cout << "[POSTPROC] === Starting YoloSegPostprocessorOp::compute() ===" << std::endl;
+    log_memory_usage("Postprocessor compute start");
+    
     try {
+        std::cout << "[POSTPROC] Step 1: Receiving inputs..." << std::endl;
         // Receive inference inputs only (matching Python version)
         std::shared_ptr<holoscan::Tensor> predictions;
         std::shared_ptr<holoscan::Tensor> masks_seg;
         receive_inputs(op_input, predictions, masks_seg);
+        std::cout << "[POSTPROC] Step 1 completed: Inputs received" << std::endl;
         
-        // Process predictions using GPU
+        std::cout << "[POSTPROC] Step 2: Processing predictions using GPU..." << std::endl;
+        // Process predictions using GPU (memory optimized)
         YoloOutput output = process_boxes_gpu(predictions, masks_seg);
+        std::cout << "[POSTPROC] Step 2 completed: GPU processing done" << std::endl;
         
+        std::cout << "[POSTPROC] Step 3: Post-processing output..." << std::endl;
         std::cout << "YoloOutput before sort - Found " << output.boxes.size() << " detections" << std::endl;
         
         // Sort by class IDs (matching Python implementation)
@@ -70,7 +114,9 @@ void YoloSegPostprocessorOp::compute(holoscan::InputContext& op_input,
         
         // Organize boxes by class ID
         auto organized_boxes = organize_boxes(output.class_ids, output.boxes);
+        std::cout << "[POSTPROC] Step 3 completed: Output organized" << std::endl;
         
+        std::cout << "[POSTPROC] Step 4: Creating output message..." << std::endl;
         // Create output message following Python version approach
         std::unordered_map<std::string, std::shared_ptr<holoscan::Tensor>> out_message;
         std::map<int, std::vector<std::vector<float>>> out_texts;
@@ -78,17 +124,84 @@ void YoloSegPostprocessorOp::compute(holoscan::InputContext& op_input,
         
         // Prepare output message (matching Python version)
         prepare_output_message(organized_boxes, out_message, out_texts, out_scores_pos);
+        std::cout << "[POSTPROC] Step 4 completed: Output message prepared" << std::endl;
         
-        // Process scores for visualization
+        std::cout << "[POSTPROC] Step 5: Processing scores for visualization..." << std::endl;
+        // Process scores for visualization - SIMPLIFIED APPROACH
         std::vector<holoscan::ops::HolovizOp::InputSpec> specs;
-        process_scores(output.class_ids, output.boxes_scores, out_scores_pos, specs, out_message);
+        std::unordered_map<std::string, std::shared_ptr<holoscan::Tensor>> out_scores;
         
+        // Create simple score visualization without complex tensor names
+        if (!output.class_ids.empty()) {
+            // Create a simple text specification for scores
+            holoscan::ops::HolovizOp::InputSpec score_spec("", "text");
+            score_spec.color_ = {1.0f, 1.0f, 1.0f, 1.0f}; // White color
+            
+            // Add score text for each detection
+            for (size_t i = 0; i < output.class_ids.size() && i < output.boxes_scores.size(); ++i) {
+                std::string score_text = "Class " + std::to_string(output.class_ids[i]) + ": " + 
+                                       std::to_string(output.boxes_scores[i]).substr(0, 6);
+                score_spec.text_.push_back(score_text);
+                std::cout << "Detection " << i << ": class=" << output.class_ids[i] << ", score=" << output.boxes_scores[i] << std::endl;
+            }
+            specs.push_back(score_spec);
+            std::cout << "Created " << output.class_ids.size() << " score text specifications" << std::endl;
+        }
+        
+        std::cout << "[POSTPROC] Step 5 completed: Scores processed with simplified approach" << std::endl;
+        
+        std::cout << "[POSTPROC] Step 6: Creating mask tensor..." << std::endl;
+        // Create mask tensor (memory optimized)
+        if (!output.output_masks.empty()) {
+            std::cout << "Creating mask tensor with " << output.output_masks.size() << " masks" << std::endl;
+            
+            // Pre-calculate total size to avoid reallocation
+            size_t total_mask_size = 0;
+            for (const auto& mask : output.output_masks) {
+                total_mask_size += mask.size();
+            }
+            
+            // Pre-allocate mask data vector
+            std::vector<float> mask_data;
+            mask_data.reserve(total_mask_size);
+            
+            // Flatten the mask data for tensor creation
+            for (const auto& mask : output.output_masks) {
+                mask_data.insert(mask_data.end(), mask.begin(), mask.end());
+            }
+            
+            // Create mask tensor with appropriate shape
+            size_t num_masks = output.output_masks.size();
+            size_t mask_size = output.output_masks[0].size();
+            size_t mask_dim = static_cast<size_t>(std::sqrt(mask_size)); // Assuming square masks
+            
+            std::vector<int64_t> mask_shape = {static_cast<int64_t>(num_masks), 
+                                              static_cast<int64_t>(mask_dim), 
+                                              static_cast<int64_t>(mask_dim)};
+            
+            std::cout << "[TENSOR] Creating mask tensor with shape: [" << mask_shape[0] << ", " 
+                      << mask_shape[1] << ", " << mask_shape[2] << "] (" << mask_data.size() * sizeof(float) << " bytes)" << std::endl;
+            auto mask_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
+                mask_data.data(), mask_shape, 2, 32, 1);
+            out_message["masks"] = mask_tensor;
+            std::cout << "[TENSOR] Mask tensor created." << std::endl;
+        } else {
+            std::cout << "No masks to create tensor for" << std::endl;
+        }
+        std::cout << "[POSTPROC] Step 6 completed: Mask tensor created" << std::endl;
+        
+        std::cout << "[POSTPROC] Step 7: Emitting outputs..." << std::endl;
         // Emit outputs
         op_output.emit(out_message, "out");
         op_output.emit(specs, "output_specs");
+        std::cout << "[POSTPROC] Step 7 completed: Outputs emitted" << std::endl;
+        
+        std::cout << "[POSTPROC] === YoloSegPostprocessorOp::compute() completed successfully ===" << std::endl;
+        log_memory_usage("Postprocessor compute end");
         
     } catch (const std::exception& e) {
-        std::cerr << "Error in YoloSegPostprocessorOp: " << e.what() << std::endl;
+        std::cerr << "[POSTPROC] ERROR in compute: " << e.what() << std::endl;
+        log_memory_usage("Postprocessor compute error");
         throw;
     }
 }
@@ -122,20 +235,25 @@ void YoloSegPostprocessorOp::receive_inputs(holoscan::InputContext& op_input,
 
 YoloOutput YoloSegPostprocessorOp::process_boxes_gpu(const std::shared_ptr<holoscan::Tensor>& predictions,
                                                      const std::shared_ptr<holoscan::Tensor>& /* masks_seg */) {
+    std::cout << "[POSTPROC] === Starting process_boxes_gpu() ===" << std::endl;
+    log_memory_usage("GPU processing start");
+    
     YoloOutput output;
     
+    std::cout << "[POSTPROC] Step GPU-1: Safety checks..." << std::endl;
     // Safety checks
     if (!predictions || !predictions->data()) {
-        std::cerr << "Error: predictions tensor is null or has no data" << std::endl;
+        std::cerr << "[POSTPROC] Error: predictions tensor is null or has no data" << std::endl;
         return output;
     }
     
+    std::cout << "[POSTPROC] Step GPU-2: Getting tensor dimensions..." << std::endl;
     // Get tensor dimensions
     auto pred_shape = predictions->shape();
     
     // Validate tensor shapes
     if (pred_shape.size() < 3) {
-        std::cerr << "Error: predictions tensor should have at least 3 dimensions, got " << pred_shape.size() << std::endl;
+        std::cerr << "[POSTPROC] Error: predictions tensor should have at least 3 dimensions, got " << pred_shape.size() << std::endl;
         return output;
     }
     
@@ -144,38 +262,57 @@ YoloOutput YoloSegPostprocessorOp::process_boxes_gpu(const std::shared_ptr<holos
     int num_detections = pred_shape[1];  // 8400
     int feature_size = pred_shape[2];    // 38
     
-    std::cout << "GPU Processing: " << batch_size << "x" << num_detections << "x" << feature_size << std::endl;
+    std::cout << "[POSTPROC] GPU Processing dimensions: " << batch_size << "x" << num_detections << "x" << feature_size << std::endl;
     
+    std::cout << "[POSTPROC] Step GPU-3: Getting GPU data pointer..." << std::endl;
     // Get GPU data pointer directly
     const float* gpu_predictions = static_cast<const float*>(predictions->data());
+    std::cout << "[POSTPROC] GPU data pointer obtained: " << static_cast<const void*>(gpu_predictions) << std::endl;
     
-    // Allocate GPU memory for results using raw CUDA
-    float* d_output_boxes;
-    float* d_output_scores;
-    int* d_output_class_ids;
-    int* d_valid_detections;
-    int* d_keep_flags;
+    std::cout << "[POSTPROC] Step GPU-4: Allocating CUDA memory..." << std::endl;
+    // Allocate GPU memory for results using raw CUDA with error checking
+    float* d_output_boxes = nullptr;
+    float* d_output_scores = nullptr;
+    int* d_output_class_ids = nullptr;
+    int* d_valid_detections = nullptr;
+    int* d_keep_flags = nullptr;
     
     size_t boxes_size = num_detections * 4 * sizeof(float);
     size_t scores_size = num_detections * sizeof(float);
     size_t ids_size = num_detections * sizeof(int);
     size_t flags_size = num_detections * sizeof(int);
     
-    cudaMalloc(&d_output_boxes, boxes_size);
-    cudaMalloc(&d_output_scores, scores_size);
-    cudaMalloc(&d_output_class_ids, ids_size);
-    cudaMalloc(&d_valid_detections, flags_size);
-    cudaMalloc(&d_keep_flags, flags_size);
+    std::cout << "[POSTPROC] Memory allocation sizes: boxes=" << boxes_size << " bytes, scores=" << scores_size << " bytes, ids=" << ids_size << " bytes, flags=" << flags_size << " bytes" << std::endl;
+    cudaError_t cuda_error;
+    auto log_alloc = [](const char* name, size_t sz, cudaError_t err) {
+        std::cout << "[MEM] cudaMalloc(" << name << ", " << sz << ") => " << cudaGetErrorString(err) << std::endl;
+    };
+    cuda_error = cudaMalloc(&d_output_boxes, boxes_size); log_alloc("d_output_boxes", boxes_size, cuda_error);
+    cuda_error = cudaMalloc(&d_output_scores, scores_size); log_alloc("d_output_scores", scores_size, cuda_error);
+    cuda_error = cudaMalloc(&d_output_class_ids, ids_size); log_alloc("d_output_class_ids", ids_size, cuda_error);
+    cuda_error = cudaMalloc(&d_valid_detections, flags_size); log_alloc("d_valid_detections", flags_size, cuda_error);
+    cuda_error = cudaMalloc(&d_keep_flags, flags_size); log_alloc("d_keep_flags", flags_size, cuda_error);
+    if (!d_output_boxes || !d_output_scores || !d_output_class_ids || !d_valid_detections || !d_keep_flags) {
+        std::cerr << "[MEM] CUDA memory allocation failed!" << std::endl;
+        if (d_output_boxes) cudaFree(d_output_boxes);
+        if (d_output_scores) cudaFree(d_output_scores);
+        if (d_output_class_ids) cudaFree(d_output_class_ids);
+        if (d_valid_detections) cudaFree(d_valid_detections);
+        if (d_keep_flags) cudaFree(d_keep_flags);
+        return output;
+    }
     
-    // Initialize keep_flags to 1
+    std::cout << "[POSTPROC] Step GPU-5: Initializing keep flags..." << std::endl;
+    std::cout << "[POSTPROC] cudaMemset d_keep_flags to 1, size=" << flags_size << std::endl;
     cudaMemset(d_keep_flags, 1, flags_size);
     
+    std::cout << "[POSTPROC] Step GPU-6: Launching CUDA postprocess kernel..." << std::endl;
     // Launch CUDA kernel for postprocessing
     int block_size = 256;
     int grid_size = (num_detections + block_size - 1) / block_size;
+    std::cout << "[POSTPROC] Launching CUDA kernel with grid_size=" << grid_size << ", block_size=" << block_size << std::endl;
     
-    std::cout << "Launching CUDA kernel with grid_size=" << grid_size << ", block_size=" << block_size << std::endl;
-    
+    std::cout << "[POSTPROC] About to call launch_yolo_postprocess_kernel..." << std::endl;
     launch_yolo_postprocess_kernel(
         gpu_predictions,
         d_output_boxes,
@@ -184,28 +321,22 @@ YoloOutput YoloSegPostprocessorOp::process_boxes_gpu(const std::shared_ptr<holos
         d_valid_detections,
         num_detections,
         feature_size,
-        0.05f, // Very low confidence threshold for testing
+        0.01f, // Very low confidence threshold to see more detections
         static_cast<int>(num_class_),
         0  // Default CUDA stream
     );
+    std::cout << "[POSTPROC] launch_yolo_postprocess_kernel called successfully" << std::endl;
     
-    // Check for CUDA errors
-    cudaError_t cuda_error = cudaGetLastError();
-    if (cuda_error != cudaSuccess) {
-        std::cerr << "CUDA kernel launch failed: " << cudaGetErrorString(cuda_error) << std::endl;
-        // Cleanup
-        cudaFree(d_output_boxes);
-        cudaFree(d_output_scores);
-        cudaFree(d_output_class_ids);
-        cudaFree(d_valid_detections);
-        cudaFree(d_keep_flags);
-        return output;
-    }
+    cuda_error = cudaGetLastError();
+    std::cout << "[POSTPROC] After launch_yolo_postprocess_kernel: " << cudaGetErrorString(cuda_error) << std::endl;
     
-    // Synchronize to ensure kernel completion
+    std::cout << "[POSTPROC] Calling cudaDeviceSynchronize()..." << std::endl;
     cudaDeviceSynchronize();
+    std::cout << "[POSTPROC] cudaDeviceSynchronize() completed" << std::endl;
     
+    std::cout << "[POSTPROC] Step GPU-7: Launching NMS kernel..." << std::endl;
     // Apply NMS on GPU
+    std::cout << "[POSTPROC] About to call launch_nms_kernel..." << std::endl;
     launch_nms_kernel(
         d_output_boxes,
         d_output_scores,
@@ -215,44 +346,65 @@ YoloOutput YoloSegPostprocessorOp::process_boxes_gpu(const std::shared_ptr<holos
         0.45f, // IoU threshold
         0      // Default CUDA stream
     );
+    std::cout << "[POSTPROC] launch_nms_kernel called successfully" << std::endl;
     
-    // Check for CUDA errors
     cuda_error = cudaGetLastError();
-    if (cuda_error != cudaSuccess) {
-        std::cerr << "NMS kernel launch failed: " << cudaGetErrorString(cuda_error) << std::endl;
-        // Cleanup
-        cudaFree(d_output_boxes);
-        cudaFree(d_output_scores);
-        cudaFree(d_output_class_ids);
-        cudaFree(d_valid_detections);
-        cudaFree(d_keep_flags);
-        return output;
-    }
+    std::cout << "[POSTPROC] After launch_nms_kernel: " << cudaGetErrorString(cuda_error) << std::endl;
     
-    // Synchronize to ensure kernel completion
+    std::cout << "[POSTPROC] Calling cudaDeviceSynchronize() for NMS..." << std::endl;
     cudaDeviceSynchronize();
+    std::cout << "[POSTPROC] cudaDeviceSynchronize() for NMS completed" << std::endl;
     
-    // Copy results back to host
+    std::cout << "[POSTPROC] Step GPU-8: Copying results back to host..." << std::endl;
+    // Copy results back to host with error checking
     std::vector<float> h_output_boxes(num_detections * 4);
     std::vector<float> h_output_scores(num_detections);
     std::vector<int> h_output_class_ids(num_detections);
     std::vector<int> h_valid_detections(num_detections);
     std::vector<int> h_keep_flags(num_detections);
+    auto log_copy = [](const char* name, cudaError_t err) {
+        std::cout << "[POSTPROC] cudaMemcpy(" << name << ") => " << cudaGetErrorString(err) << std::endl;
+    };
     
-    cudaMemcpy(h_output_boxes.data(), d_output_boxes, boxes_size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_output_scores.data(), d_output_scores, scores_size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_output_class_ids.data(), d_output_class_ids, ids_size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_valid_detections.data(), d_valid_detections, flags_size, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_keep_flags.data(), d_keep_flags, flags_size, cudaMemcpyDeviceToHost);
+    std::cout << "[POSTPROC] Copying boxes..." << std::endl;
+    cuda_error = cudaMemcpy(h_output_boxes.data(), d_output_boxes, boxes_size, cudaMemcpyDeviceToHost); log_copy("h_output_boxes", cuda_error);
     
+    std::cout << "[POSTPROC] Copying scores..." << std::endl;
+    cuda_error = cudaMemcpy(h_output_scores.data(), d_output_scores, scores_size, cudaMemcpyDeviceToHost); log_copy("h_output_scores", cuda_error);
+    
+    std::cout << "[POSTPROC] Copying class IDs..." << std::endl;
+    cuda_error = cudaMemcpy(h_output_class_ids.data(), d_output_class_ids, ids_size, cudaMemcpyDeviceToHost); log_copy("h_output_class_ids", cuda_error);
+    
+    std::cout << "[POSTPROC] Copying valid detections..." << std::endl;
+    cuda_error = cudaMemcpy(h_valid_detections.data(), d_valid_detections, flags_size, cudaMemcpyDeviceToHost); log_copy("h_valid_detections", cuda_error);
+    
+    std::cout << "[POSTPROC] Copying keep flags..." << std::endl;
+    cuda_error = cudaMemcpy(h_keep_flags.data(), d_keep_flags, flags_size, cudaMemcpyDeviceToHost); log_copy("h_keep_flags", cuda_error);
+    
+    std::cout << "[POSTPROC] Step GPU-9: Cleaning up GPU memory..." << std::endl;
     // Cleanup GPU memory
+    std::cout << "[POSTPROC] Freeing CUDA memory..." << std::endl;
     cudaFree(d_output_boxes);
     cudaFree(d_output_scores);
     cudaFree(d_output_class_ids);
     cudaFree(d_valid_detections);
     cudaFree(d_keep_flags);
+    std::cout << "[POSTPROC] CUDA memory freed." << std::endl;
     
-    // Extract final results
+    std::cout << "[POSTPROC] Step GPU-10: Processing final results..." << std::endl;
+    // Count valid detections first to pre-allocate vectors
+    int valid_count = 0;
+    for (int i = 0; i < num_detections; ++i) {
+        if (h_valid_detections[i] && h_keep_flags[i]) {
+            valid_count++;
+        }
+    }
+    std::cout << "[POSTPROC] Found " << valid_count << " valid detections" << std::endl;
+    
+    output.boxes.reserve(valid_count);
+    output.boxes_scores.reserve(valid_count);
+    output.class_ids.reserve(valid_count);
+    
     for (int i = 0; i < num_detections; ++i) {
         if (h_valid_detections[i] && h_keep_flags[i]) {
             output.boxes.push_back({
@@ -266,8 +418,9 @@ YoloOutput YoloSegPostprocessorOp::process_boxes_gpu(const std::shared_ptr<holos
         }
     }
     
-    std::cout << "GPU Processing completed. Found " << output.boxes.size() << " valid detections." << std::endl;
-    
+    std::cout << "[POSTPROC] Final valid detections: " << valid_count << std::endl;
+    std::cout << "[POSTPROC] === process_boxes_gpu() completed successfully ===" << std::endl;
+    log_memory_usage("GPU processing end");
     return output;
 }
 
@@ -341,14 +494,23 @@ void YoloSegPostprocessorOp::prepare_output_message(
                 score_coords.push_back({x2, y1});
             }
             
-                    // Log detection results but skip tensor creation for now
+            // Create boxes tensor with shape (1, num_boxes, 2, 2)
             if (!class_boxes.empty()) {
                 std::cout << "Found " << class_boxes.size() << " detections for class " << class_id << std::endl;
                 for (size_t i = 0; i < class_boxes.size(); ++i) {
                     const auto& box = class_boxes[i];
                     std::cout << "  Box " << i << ": [" << box[0] << ", " << box[1] << ", " << box[2] << ", " << box[3] << "]" << std::endl;
                 }
-                // TODO: Create actual tensor when tensor API is resolved
+                
+                // Create tensor with shape (1, num_boxes, 2, 2) to match Python reshape
+                std::vector<int64_t> boxes_shape = {1, static_cast<int64_t>(class_boxes.size()), 2, 2};
+                
+                std::cout << "[TENSOR] Creating boxes tensor for class " << class_id << " with shape: [1, " << class_boxes.size() << ", 2, 2] (" << boxes_data.size() * sizeof(float) << " bytes)" << std::endl;
+                // Create tensor using Holoscan's tensor creation API
+                auto boxes_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
+                    boxes_data.data(), boxes_shape, 0, 32, 1);
+                out_message[boxes_key] = boxes_tensor;
+                std::cout << "[TENSOR] Boxes tensor created for class " << class_id << std::endl;
             }
             
             // Store text and score coordinates
@@ -357,27 +519,33 @@ void YoloSegPostprocessorOp::prepare_output_message(
             
             std::cout << "Created tensor for class " << class_id << " with " << class_boxes.size() << " boxes" << std::endl;
         } else {
-            // TODO: Class has no detections - create empty tensors (temporarily disabled)
-            // std::vector<float> empty_boxes_data = {-1.0f, -1.0f, -1.0f, -1.0f};
-            // std::vector<int64_t> empty_boxes_shape = {1, 1, 2, 2};
-            // auto empty_boxes_tensor = std::make_shared<holoscan::Tensor>(...);
-            // out_message[boxes_key] = empty_boxes_tensor;
+            // Class has no detections - create empty tensors (matching Python implementation)
+            std::vector<float> empty_boxes_data = {-1.0f, -1.0f, -1.0f, -1.0f};
+            std::vector<int64_t> empty_boxes_shape = {1, 1, 2, 2};
+            std::cout << "[TENSOR] Creating empty boxes tensor for class " << class_id << " with shape: [1, 1, 2, 2] (" << empty_boxes_data.size() * sizeof(float) << " bytes)" << std::endl;
+            auto empty_boxes_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
+                empty_boxes_data.data(), empty_boxes_shape, 0, 32, 1);
+            out_message[boxes_key] = empty_boxes_tensor;
             
             // Empty text coordinates
             out_texts[class_id] = {{{-1.0f, -1.0f, 0.04f}}};
+            std::cout << "[TENSOR] Empty boxes tensor created for class " << class_id << std::endl;
         }
         
-        // Create label tensor (text coordinates)
+        // Create label tensor (text coordinates) - matching Python implementation
         const auto& text_coords = out_texts[class_id];
         std::vector<float> label_data;
         for (const auto& coord : text_coords) {
             label_data.insert(label_data.end(), coord.begin(), coord.end());
         }
         
-        // TODO: Create label tensor (temporarily disabled due to tensor API issues)
-        // std::vector<int64_t> label_shape = {1, static_cast<int64_t>(text_coords.size()), 3};
-        // auto label_tensor = std::make_shared<holoscan::Tensor>(...);
-        // out_message[label_key] = label_tensor;
+        // Create label tensor with shape (1, num_text_coords, 3)
+        std::vector<int64_t> label_shape = {1, static_cast<int64_t>(text_coords.size()), 3};
+        std::cout << "[TENSOR] Creating label tensor for class " << class_id << " with shape: [1, " << text_coords.size() << ", 3] (" << label_data.size() * sizeof(float) << " bytes)" << std::endl;
+        auto label_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
+            label_data.data(), label_shape, 0, 32, 1);
+        out_message[label_key] = label_tensor;
+        std::cout << "[TENSOR] Label tensor created for class " << class_id << std::endl;
     }
 }
 
@@ -390,16 +558,40 @@ void YoloSegPostprocessorOp::process_scores(
     
     std::cout << "Processing scores for " << class_ids.size() << " detections" << std::endl;
     
-    // For now, don't create any specs to avoid tensor creation issues
-    // TODO: Implement proper score visualization when tensor API is resolved
-    
-    std::cout << "Skipping score visualization specs for now" << std::endl;
-    
-    // Log detection information for debugging
-    for (size_t i = 0; i < class_ids.size(); ++i) {
-        int class_id = class_ids[i];
-        float score = scores[i];
-        std::cout << "Detection " << i << ": class=" << class_id << ", score=" << score << std::endl;
+    // Create a single combined score tensor for all detections
+    if (!class_ids.empty()) {
+        std::vector<float> all_score_data;
+        std::vector<int64_t> score_shape = {1, static_cast<int64_t>(class_ids.size()), 3};
+        
+        // Collect all score positions
+        std::vector<std::vector<float>> scores_pos_list;
+        for (const auto& [index, score_pos] : scores_pos) {
+            scores_pos_list.insert(scores_pos_list.end(), score_pos.begin(), score_pos.end());
+        }
+        
+        // Create combined score data
+        for (size_t i = 0; i < class_ids.size() && i < scores_pos_list.size(); ++i) {
+            const auto& score_pos = scores_pos_list[i];
+            all_score_data.insert(all_score_data.end(), score_pos.begin(), score_pos.end());
+            
+            std::cout << "Detection " << i << ": class=" << class_ids[i] << ", score=" << scores[i] << std::endl;
+        }
+        
+        // Create single combined score tensor
+        auto score_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
+            all_score_data.data(), score_shape, 0, 32, 1);
+        
+        std::string score_key = "scores";
+        out_scores[score_key] = score_tensor;
+        
+        // Create HolovizOp InputSpec for text visualization
+        holoscan::ops::HolovizOp::InputSpec spec(score_key, "text");
+        spec.color_ = {1.0f, 1.0f, 1.0f, 1.0f}; // White color
+        specs.push_back(spec);
+        
+        std::cout << "Created combined score tensor for " << class_ids.size() << " detections" << std::endl;
+    } else {
+        std::cout << "No detections to create score tensors for" << std::endl;
     }
 }
 
