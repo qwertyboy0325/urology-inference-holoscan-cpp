@@ -456,96 +456,58 @@ std::map<int, std::vector<std::vector<float>>> YoloSegPostprocessorOp::organize_
 void YoloSegPostprocessorOp::prepare_output_message(
     const std::map<int, std::vector<std::vector<float>>>& organized_boxes,
     std::unordered_map<std::string, std::shared_ptr<holoscan::Tensor>>& out_message,
-    std::map<int, std::vector<std::vector<float>>>& out_texts,
-    std::map<int, std::vector<std::vector<float>>>& out_scores_pos) {
-    
-    std::cout << "Preparing output message for " << organized_boxes.size() << " class groups" << std::endl;
-    
-    // Create output tensors for each class (matching Python implementation)
-    for (int class_id = 0; class_id < static_cast<int>(num_class_); ++class_id) {
-        std::string boxes_key = "boxes" + std::to_string(class_id);
-        std::string label_key = "label" + std::to_string(class_id);
+    std::map<int, std::vector<std::vector<float>>>& /*out_texts*/,
+    std::map<int, std::vector<std::vector<float>>>& /*out_scores_pos*/) {
+    // Test with real boxes tensor only
+    if (!organized_boxes.empty()) {
+        // Get the first class boxes
+        auto first_class = organized_boxes.begin();
+        const auto& boxes = first_class->second;
         
-        if (organized_boxes.find(class_id) != organized_boxes.end()) {
-            // Class has detections
-            const auto& class_boxes = organized_boxes.at(class_id);
-            
-            // Create boxes tensor: reshape to (1, -1, 2) format
+        if (!boxes.empty()) {
+            // Flatten the boxes data
             std::vector<float> boxes_data;
-            std::vector<std::vector<float>> text_coords;
-            std::vector<std::vector<float>> score_coords;
-            
-            for (const auto& box : class_boxes) {
-                // box format: [x1, y1, x2, y2] -> convert to two points format
-                float x1 = box[0], y1 = box[1], x2 = box[2], y2 = box[3];
-                
-                // First point (top-left)
-                boxes_data.push_back(x1);
-                boxes_data.push_back(y1);
-                
-                // Second point (bottom-right)
-                boxes_data.push_back(x2);
-                boxes_data.push_back(y2);
-                
-                // Text position (top-left corner)
-                text_coords.push_back({x1, y1});
-                
-                // Score position (top-right corner)
-                score_coords.push_back({x2, y1});
-            }
-            
-            // Create boxes tensor with shape (1, num_boxes, 2, 2)
-            if (!class_boxes.empty()) {
-                std::cout << "Found " << class_boxes.size() << " detections for class " << class_id << std::endl;
-                for (size_t i = 0; i < class_boxes.size(); ++i) {
-                    const auto& box = class_boxes[i];
-                    std::cout << "  Box " << i << ": [" << box[0] << ", " << box[1] << ", " << box[2] << ", " << box[3] << "]" << std::endl;
+            for (const auto& box : boxes) {
+                if (box.size() >= 4) {
+                    boxes_data.insert(boxes_data.end(), box.begin(), box.begin() + 4);
                 }
-                
-                // Create tensor with shape (1, num_boxes, 2, 2) to match Python reshape
-                std::vector<int64_t> boxes_shape = {1, static_cast<int64_t>(class_boxes.size()), 2, 2};
-                
-                std::cout << "[TENSOR] Creating boxes tensor for class " << class_id << " with shape: [1, " << class_boxes.size() << ", 2, 2] (" << boxes_data.size() * sizeof(float) << " bytes)" << std::endl;
-                // Create tensor using Holoscan's tensor creation API
-                auto boxes_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
-                    boxes_data.data(), boxes_shape, 0, 32, 1);
-                out_message[boxes_key] = boxes_tensor;
-                std::cout << "[TENSOR] Boxes tensor created for class " << class_id << std::endl;
             }
             
-            // Store text and score coordinates
-            out_texts[class_id] = append_size_to_text_coord(text_coords, 0.04f);
-            out_scores_pos[class_id] = append_size_to_score_coord(score_coords, 0.04f);
-            
-            std::cout << "Created tensor for class " << class_id << " with " << class_boxes.size() << " boxes" << std::endl;
+            if (!boxes_data.empty()) {
+                // Create tensor shape: [num_boxes, 4] for x1,y1,x2,y2
+                std::vector<int64_t> boxes_shape = {static_cast<int64_t>(boxes.size()), 4};
+                
+                std::cout << "[TENSOR] Creating real boxes tensor with " << boxes.size() 
+                          << " boxes, shape: [" << boxes_shape[0] << ", " << boxes_shape[1] << "]" << std::endl;
+                
+                // Try creating a simple test tensor with minimal data
+                std::vector<float> test_data = {0.1f, 0.1f, 0.9f, 0.9f}; // Simple bounding box
+                std::vector<int64_t> test_shape = {1, 4}; // [num_boxes, 4]
+                
+                // Try using the simple tensor creation function
+                auto boxes_tensor = urology::yolo_utils::make_holoscan_tensor_simple(
+                    test_data, test_shape);
+                out_message["boxes0"] = boxes_tensor;
+                if (boxes_tensor) {
+                    auto* dl_managed = reinterpret_cast<DLManagedTensor*>(boxes_tensor->data());
+                    if (dl_managed) {
+                        auto dtype = dl_managed->dl_tensor.dtype;
+                        std::cout << "[DEBUG] boxes_tensor dtype: code=" << int(dtype.code)
+                                  << ", bits=" << int(dtype.bits)
+                                  << ", lanes=" << int(dtype.lanes) << std::endl;
+                    } else {
+                        std::cout << "[DEBUG] boxes_tensor: could not cast to DLManagedTensor" << std::endl;
+                    }
+                }
+                std::cout << "[TENSOR] Sent simple test tensor to HolovizOp for dtype test" << std::endl;
+            } else {
+                std::cout << "[TENSOR] No valid box data to create tensor" << std::endl;
+            }
         } else {
-            // Class has no detections - create empty tensors (matching Python implementation)
-            std::vector<float> empty_boxes_data = {-1.0f, -1.0f, -1.0f, -1.0f};
-            std::vector<int64_t> empty_boxes_shape = {1, 1, 2, 2};
-            std::cout << "[TENSOR] Creating empty boxes tensor for class " << class_id << " with shape: [1, 1, 2, 2] (" << empty_boxes_data.size() * sizeof(float) << " bytes)" << std::endl;
-            auto empty_boxes_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
-                empty_boxes_data.data(), empty_boxes_shape, 0, 32, 1);
-            out_message[boxes_key] = empty_boxes_tensor;
-            
-            // Empty text coordinates
-            out_texts[class_id] = {{{-1.0f, -1.0f, 0.04f}}};
-            std::cout << "[TENSOR] Empty boxes tensor created for class " << class_id << std::endl;
+            std::cout << "[TENSOR] No boxes in first class" << std::endl;
         }
-        
-        // Create label tensor (text coordinates) - matching Python implementation
-        const auto& text_coords = out_texts[class_id];
-        std::vector<float> label_data;
-        for (const auto& coord : text_coords) {
-            label_data.insert(label_data.end(), coord.begin(), coord.end());
-        }
-        
-        // Create label tensor with shape (1, num_text_coords, 3)
-        std::vector<int64_t> label_shape = {1, static_cast<int64_t>(text_coords.size()), 3};
-        std::cout << "[TENSOR] Creating label tensor for class " << class_id << " with shape: [1, " << text_coords.size() << ", 3] (" << label_data.size() * sizeof(float) << " bytes)" << std::endl;
-        auto label_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
-            label_data.data(), label_shape, 0, 32, 1);
-        out_message[label_key] = label_tensor;
-        std::cout << "[TENSOR] Label tensor created for class " << class_id << std::endl;
+    } else {
+        std::cout << "[TENSOR] No organized boxes available" << std::endl;
     }
 }
 
@@ -578,11 +540,12 @@ void YoloSegPostprocessorOp::process_scores(
         }
         
         // Create single combined score tensor
-        auto score_tensor = urology::yolo_utils::make_holoscan_tensor_from_data(
-            all_score_data.data(), score_shape, 0, 32, 1);
+        auto score_tensor = urology::yolo_utils::make_holoscan_tensor_no_holoviz(all_score_data, score_shape);
         
         std::string score_key = "scores";
-        out_scores[score_key] = score_tensor;
+        if (score_tensor) {
+            out_scores[score_key] = score_tensor;
+        }
         
         // Create HolovizOp InputSpec for text visualization
         holoscan::ops::HolovizOp::InputSpec spec(score_key, "text");

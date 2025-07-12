@@ -275,7 +275,7 @@ void UrologyApp::compose() {
     );
     std::cout << "[MEM] YOLO postprocessor created" << std::endl;
     
-    // Visualization - Check for headless mode
+        // Visualization - Check for headless mode
     bool headless_mode = std::getenv("HOLOVIZ_HEADLESS") != nullptr;
     
     std::cout << "[MEM] Setting up visualization (headless=" << (headless_mode ? "true" : "false") << ")..." << std::endl;

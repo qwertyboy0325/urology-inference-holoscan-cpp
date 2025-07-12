@@ -5,6 +5,7 @@
 #include <holoscan/core/domain/tensor.hpp>
 #include <dlpack/dlpack.h>
 #include <cstring>
+#include <iostream>
 
 namespace urology {
 namespace yolo_utils {
@@ -264,6 +265,72 @@ std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_from_data(
     // Wrap in Holoscan Tensor
     auto tensor = std::make_shared<holoscan::Tensor>(dl_managed_tensor);
     return tensor;
+}
+
+// Alternative function that creates tensors using a simpler approach
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_simple(
+    const std::vector<float>& data, const std::vector<int64_t>& shape) {
+    // Create a copy of the data to ensure it stays alive
+    auto* data_copy = new std::vector<float>(data);
+    
+    // Allocate and fill DLTensor with float32
+    auto* dl_managed_tensor = new DLManagedTensor();
+    dl_managed_tensor->dl_tensor.data = data_copy->data();
+    dl_managed_tensor->dl_tensor.device = DLDevice{ kDLCPU, 0 };
+    dl_managed_tensor->dl_tensor.ndim = static_cast<int>(shape.size());
+    dl_managed_tensor->dl_tensor.dtype = DLDataType{ 1, 32, 1 };  // kFloat32=1, 32 bits, 1 lane
+    dl_managed_tensor->dl_tensor.shape = new int64_t[shape.size()];
+    std::memcpy(dl_managed_tensor->dl_tensor.shape, shape.data(), shape.size() * sizeof(int64_t));
+    dl_managed_tensor->dl_tensor.strides = nullptr;
+    dl_managed_tensor->dl_tensor.byte_offset = 0;
+    dl_managed_tensor->manager_ctx = data_copy;  // Store the data vector
+    dl_managed_tensor->deleter = [](DLManagedTensor* self) {
+        delete[] self->dl_tensor.shape;
+        delete static_cast<std::vector<float>*>(self->manager_ctx);
+        delete self;
+    };
+
+    // Wrap in Holoscan Tensor
+    auto tensor = std::make_shared<holoscan::Tensor>(dl_managed_tensor);
+    return tensor;
+}
+
+// Try a different approach - create tensor with different dtype mapping
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_holoviz_compatible(
+    const std::vector<float>& data, const std::vector<int64_t>& shape) {
+    // Create a copy of the data to ensure it stays alive
+    auto* data_copy = new std::vector<float>(data);
+    
+    // Allocate and fill DLTensor - try using kDLInt=0 but with float data
+    // This might work if HolovizOp expects a different dtype mapping
+    auto* dl_managed_tensor = new DLManagedTensor();
+    dl_managed_tensor->dl_tensor.data = data_copy->data();
+    dl_managed_tensor->dl_tensor.device = DLDevice{ kDLCPU, 0 };
+    dl_managed_tensor->dl_tensor.ndim = static_cast<int>(shape.size());
+    dl_managed_tensor->dl_tensor.dtype = DLDataType{ 0, 32, 1 };  // kDLInt=0, 32 bits, 1 lane
+    dl_managed_tensor->dl_tensor.shape = new int64_t[shape.size()];
+    std::memcpy(dl_managed_tensor->dl_tensor.shape, shape.data(), shape.size() * sizeof(int64_t));
+    dl_managed_tensor->dl_tensor.strides = nullptr;
+    dl_managed_tensor->dl_tensor.byte_offset = 0;
+    dl_managed_tensor->manager_ctx = data_copy;  // Store the data vector
+    dl_managed_tensor->deleter = [](DLManagedTensor* self) {
+        delete[] self->dl_tensor.shape;
+        delete static_cast<std::vector<float>*>(self->manager_ctx);
+        delete self;
+    };
+
+    // Wrap in Holoscan Tensor
+    auto tensor = std::make_shared<holoscan::Tensor>(dl_managed_tensor);
+    return tensor;
+}
+
+// Try using a completely different approach - create tensor without sending to HolovizOp
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_no_holoviz(
+    const std::vector<float>& data, const std::vector<int64_t>& shape) {
+    // For now, just return nullptr to skip tensor creation entirely
+    // This will help us test if the issue is specifically with HolovizOp
+    std::cout << "[TENSOR] Skipping tensor creation for HolovizOp compatibility test" << std::endl;
+    return nullptr;
 }
 
 } // namespace yolo_utils

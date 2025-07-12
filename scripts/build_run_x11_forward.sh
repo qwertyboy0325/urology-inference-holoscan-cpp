@@ -126,7 +126,7 @@ docker run -it --rm \
         ls -la *urology* *simple* *hello* 2>/dev/null || echo 'No executables found'
         echo ''
         echo '🎯 Running full application (Display mode)...'
-        ./urology_inference_holoscan_cpp --data=../data
+                ./urology_inference_holoscan_cpp --data=../data
     else
         echo '❌ Project build failed'
     fi

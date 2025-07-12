@@ -55,5 +55,17 @@ std::vector<float> resize_mask(
 std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_from_data(
     void* data, const std::vector<int64_t>& shape, int dtype_code, int dtype_bits, int dtype_lanes);
 
+// Alternative function that creates tensors using a simpler approach
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_simple(
+    const std::vector<float>& data, const std::vector<int64_t>& shape);
+
+// Try a different approach - create tensor with different dtype mapping
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_holoviz_compatible(
+    const std::vector<float>& data, const std::vector<int64_t>& shape);
+
+// Try using a completely different approach - create tensor without sending to HolovizOp
+std::shared_ptr<holoscan::Tensor> make_holoscan_tensor_no_holoviz(
+    const std::vector<float>& data, const std::vector<int64_t>& shape);
+
 } // namespace yolo_utils
 } // namespace urology 

@@ -28,7 +28,7 @@ find_package(yaml-cpp QUIET)
 # Include directories
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 if(OpenCV_FOUND)
-    include_directories(${OpenCV_INCLUDE_DIRS})
+include_directories(${OpenCV_INCLUDE_DIRS})
     message(STATUS "OpenCV found: ${OpenCV_VERSION}")
 else()
     message(STATUS "OpenCV not found - cv_utils will be disabled")

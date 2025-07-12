@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
         std::cout << "[MEM] === Application completed successfully ===" << std::endl;
         log_memory_usage("Application end");
         std::cout << "Application completed successfully" << std::endl;
-        return 0;
+    return 0;
         
     } catch (const std::exception& ex) {
         std::cerr << "[MEM] === Application failed with exception ===" << std::endl;
