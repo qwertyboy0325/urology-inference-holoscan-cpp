@@ -10,6 +10,10 @@
 #include <holoscan/core/gxf/gxf_component.hpp>
 #include <holoscan/core/condition.hpp>
 
+// Include our new HolovizOp-native postprocessor
+#include "operators/holoviz_native_yolo_postprocessor.hpp"
+#include "operators/holoviz_static_config.hpp"
+#include "operators/holoviz_common_types.hpp"
 
 #include <string>
 #include <map>
@@ -25,10 +29,8 @@ class VideoEncoderContext;
 class VideoWriteBitstreamOp;
 class TensorToVideoBufferOp;
 
-struct LabelInfo {
-    std::string text;
-    std::vector<float> color;
-};
+// Forward declaration for legacy postprocessor
+class YoloSegPostprocessorOp;
 
 class UrologyApp : public holoscan::Application {
 public:
@@ -67,6 +69,7 @@ private:
     void setup_inference_pipeline();
     void setup_recording_pipeline();
     void load_gxf_extensions();
+    void setup_holoviz_static_config();
 
     // Configuration
     std::string data_path_;
@@ -88,13 +91,22 @@ private:
     bool pipeline_paused_;
     
     // Label dictionary
-    std::map<int, LabelInfo> label_dict_;
+    LabelDict label_dict_;
+    
+    // Static tensor configuration for HolovizOp
+    std::vector<holoscan::ops::HolovizOp::InputSpec> static_tensor_config_;
     
     // Operators
     std::shared_ptr<holoscan::ops::VideoStreamReplayerOp> replayer_;
     std::shared_ptr<holoscan::ops::FormatConverterOp> format_converter_;
     std::shared_ptr<holoscan::ops::InferenceOp> inference_;
     std::shared_ptr<holoscan::ops::HolovizOp> visualizer_;
+    
+    // New HolovizOp-native postprocessor (replaces old YoloSegPostprocessorOp)
+    std::shared_ptr<HolovizNativeYoloPostprocessor> holoviz_native_postprocessor_;
+    
+    // Legacy postprocessor (for comparison/testing)
+    std::shared_ptr<YoloSegPostprocessorOp> legacy_postprocessor_;
     
     // Video encoder operators (for recording)
     std::shared_ptr<VideoEncoderRequestOp> video_encoder_request_;

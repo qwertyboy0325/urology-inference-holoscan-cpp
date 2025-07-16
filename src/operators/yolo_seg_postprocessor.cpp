@@ -68,14 +68,14 @@ void YoloSegPostprocessorOp::setup(holoscan::OperatorSpec& spec) {
     
     try {
         std::cout << "[POSTPROC] Setting up input/output specifications..." << std::endl;
-        spec.input<holoscan::TensorMap>("in");
-        spec.output<holoscan::TensorMap>("out");
-        spec.output<std::vector<holoscan::ops::HolovizOp::InputSpec>>("output_specs");
+    spec.input<holoscan::TensorMap>("in");
+    spec.output<holoscan::TensorMap>("out");
+    spec.output<std::vector<holoscan::ops::HolovizOp::InputSpec>>("output_specs");
         
         std::cout << "[POSTPROC] Setting up parameters..." << std::endl;
-        spec.param(scores_threshold_, "scores_threshold", "Scores threshold");
-        spec.param(num_class_, "num_class", "Number of classes");
-        spec.param(out_tensor_name_, "out_tensor_name", "Output tensor name");
+    spec.param(scores_threshold_, "scores_threshold", "Scores threshold");
+    spec.param(num_class_, "num_class", "Number of classes");
+    spec.param(out_tensor_name_, "out_tensor_name", "Output tensor name");
         
         std::cout << "[POSTPROC] Setup completed successfully" << std::endl;
         log_memory_usage("Postprocessor setup end");

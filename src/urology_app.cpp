@@ -1,7 +1,8 @@
 #include "holoscan_fix.hpp"
 #include "urology_app.hpp"
 #include "operators/yolo_seg_postprocessor.hpp"
-
+#include "operators/holoviz_native_yolo_postprocessor.hpp"
+#include "operators/holoviz_static_config.hpp"
 
 #include <yaml-cpp/yaml.h>
 #include <iostream>
@@ -63,20 +64,20 @@ UrologyApp::UrologyApp(const std::string& data_path,
 
 void UrologyApp::load_labels() {
     if (labels_file_.empty()) {
-        // Use default labels
+        // Use default labels with enhanced LabelInfo structure
         label_dict_ = {
-            {0, {"Background", {0.0f, 0.0f, 0.0f, 0.0f}}},
-            {1, {"Spleen", {0.1451f, 0.9412f, 0.6157f, 0.2f}}},
-            {2, {"Left_Kidney", {0.8941f, 0.1176f, 0.0941f, 0.2f}}},
-            {3, {"Left_Renal_Artery", {1.0000f, 0.8039f, 0.1529f, 0.2f}}},
-            {4, {"Left_Renal_Vein", {0.0039f, 0.9373f, 1.0000f, 0.2f}}},
-            {5, {"Left_Ureter", {0.9569f, 0.9019f, 0.1569f, 0.2f}}},
-            {6, {"Left_Lumbar_Vein", {0.0157f, 0.4549f, 0.4509f, 0.0f}}},
-            {7, {"Left_Adrenal_Vein", {0.8941f, 0.5647f, 0.0706f, 0.0f}}},
-            {8, {"Left_Gonadal_Vein", {0.5019f, 0.1059f, 0.4471f, 0.0f}}},
-            {9, {"Psoas_Muscle", {1.0000f, 1.0000f, 1.0000f, 0.2f}}},
-            {10, {"Colon", {0.4314f, 0.4863f, 1.0000f, 0.0f}}},
-            {11, {"Abdominal_Aorta", {0.6784f, 0.4941f, 0.2745f, 0.0f}}}
+            {0, {"Background", {0.0f, 0.0f, 0.0f, 0.0f}, 0.0f, 0}},
+            {1, {"Spleen", {0.1451f, 0.9412f, 0.6157f, 0.2f}, 0.7f, 4}},
+            {2, {"Left_Kidney", {0.8941f, 0.1176f, 0.0941f, 0.2f}, 0.7f, 4}},
+            {3, {"Left_Renal_Artery", {1.0000f, 0.8039f, 0.1529f, 0.2f}, 0.7f, 4}},
+            {4, {"Left_Renal_Vein", {0.0039f, 0.9373f, 1.0000f, 0.2f}, 0.7f, 4}},
+            {5, {"Left_Ureter", {0.9569f, 0.9019f, 0.1569f, 0.2f}, 0.7f, 4}},
+            {6, {"Left_Lumbar_Vein", {0.0157f, 0.4549f, 0.4509f, 0.0f}, 0.7f, 4}},
+            {7, {"Left_Adrenal_Vein", {0.8941f, 0.5647f, 0.0706f, 0.0f}, 0.7f, 4}},
+            {8, {"Left_Gonadal_Vein", {0.5019f, 0.1059f, 0.4471f, 0.0f}, 0.7f, 4}},
+            {9, {"Psoas_Muscle", {1.0000f, 1.0000f, 1.0000f, 0.2f}, 0.7f, 4}},
+            {10, {"Colon", {0.4314f, 0.4863f, 1.0000f, 0.0f}, 0.7f, 4}},
+            {11, {"Abdominal_Aorta", {0.6784f, 0.4941f, 0.2745f, 0.0f}, 0.7f, 4}}
         };
         return;
     }
@@ -97,6 +98,9 @@ void UrologyApp::load_labels() {
                         labels[i][3].as<float>(),
                         labels[i][4].as<float>()
                     };
+                    // Use default opacity and line_width if not specified
+                    info.opacity = labels[i].size() > 5 ? labels[i][5].as<float>() : 0.7f;
+                    info.line_width = labels[i].size() > 6 ? labels[i][6].as<int>() : 4;
                     label_dict_[i] = info;
                 }
             }
@@ -104,6 +108,26 @@ void UrologyApp::load_labels() {
     } catch (const std::exception& e) {
         std::cerr << "Error loading labels file: " << e.what() << std::endl;
         std::cerr << "Using default labels." << std::endl;
+    }
+}
+
+void UrologyApp::setup_holoviz_static_config() {
+    std::cout << "[HOLOVIZ_CONFIG] Setting up static tensor configuration..." << std::endl;
+    
+    // Create static tensor configuration using our new function
+    static_tensor_config_ = create_static_tensor_config(label_dict_);
+    
+    std::cout << "[HOLOVIZ_CONFIG] Created static configuration with " 
+              << static_tensor_config_.size() << " tensor specs" << std::endl;
+    
+    // Log configuration details for debugging
+    if (std::getenv("HOLOVIZ_DEBUG_CONFIG")) {
+        std::cout << "[HOLOVIZ_CONFIG] Configuration details:" << std::endl;
+        for (size_t i = 0; i < static_tensor_config_.size(); ++i) {
+            const auto& spec = static_tensor_config_[i];
+            std::cout << "  [" << i << "] " << (spec.tensor_name_.empty() ? "(default)" : spec.tensor_name_) 
+                      << " -> " << static_cast<int>(spec.type_) << std::endl;
+        }
     }
 }
 
@@ -159,6 +183,9 @@ void UrologyApp::compose() {
         holoscan::Arg("max_size", int64_t(5))
     );
     std::cout << "[MEM] CUDA stream pool created" << std::endl;
+    
+    // Setup HolovizOp static configuration
+    setup_holoviz_static_config();
     
     // Video replayer
     std::cout << "[MEM] Setting up video replayer..." << std::endl;
@@ -265,17 +292,34 @@ void UrologyApp::compose() {
     );
     std::cout << "[MEM] Inference operator created" << std::endl;
     
-    std::cout << "[MEM] Creating YOLO postprocessor..." << std::endl;
-    // YOLO postprocessor
-    auto yolo_postprocessor = make_operator<YoloSegPostprocessorOp>(
-        "yolo_seg_postprocessor",
-        holoscan::Arg("scores_threshold", 0.2),
-        holoscan::Arg("num_class", int64_t(12)),
-        holoscan::Arg("out_tensor_name", std::string("out_tensor"))
+    // Create NEW HolovizOp-native postprocessor
+    std::cout << "[MEM] Creating NEW HolovizOp-native YOLO postprocessor..." << std::endl;
+    holoviz_native_postprocessor_ = make_operator<HolovizNativeYoloPostprocessor>(
+        "holoviz_native_yolo_postprocessor",
+        holoscan::Arg("confidence_threshold", std::vector<float>{0.5f}),
+        holoscan::Arg("nms_threshold", std::vector<float>{0.45f}),
+        holoscan::Arg("label_dict", label_dict_),
+        holoscan::Arg("color_lut", create_default_color_lut()),
+        holoscan::Arg("input_width", 640),
+        holoscan::Arg("input_height", 640),
+        holoscan::Arg("enable_gpu_processing", true),
+        holoscan::Arg("enable_debug_output", std::getenv("HOLOVIZ_DEBUG") != nullptr)
     );
-    std::cout << "[MEM] YOLO postprocessor created" << std::endl;
+    std::cout << "[MEM] NEW HolovizOp-native YOLO postprocessor created" << std::endl;
     
-        // Visualization - Check for headless mode
+    // Create legacy postprocessor for comparison (optional)
+    if (std::getenv("USE_LEGACY_POSTPROCESSOR")) {
+        std::cout << "[MEM] Creating legacy YOLO postprocessor for comparison..." << std::endl;
+        legacy_postprocessor_ = make_operator<YoloSegPostprocessorOp>(
+            "legacy_yolo_seg_postprocessor",
+            holoscan::Arg("scores_threshold", 0.2),
+            holoscan::Arg("num_class", int64_t(12)),
+            holoscan::Arg("out_tensor_name", std::string("legacy_out_tensor"))
+        );
+        std::cout << "[MEM] Legacy YOLO postprocessor created" << std::endl;
+    }
+    
+    // Visualization - Check for headless mode
     bool headless_mode = std::getenv("HOLOVIZ_HEADLESS") != nullptr;
     
     std::cout << "[MEM] Setting up visualization (headless=" << (headless_mode ? "true" : "false") << ")..." << std::endl;
@@ -304,37 +348,44 @@ void UrologyApp::compose() {
         // Connect the pipeline with headless visualization
         add_flow(replayer_, format_converter_, {{"output", "source_video"}});
         add_flow(format_converter_, inference_, {{"tensor", "receivers"}});
-        add_flow(inference_, yolo_postprocessor, {{"transmitter", "in"}});
-        add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}, {"output_specs", "input_specs"}});
+        add_flow(inference_, holoviz_native_postprocessor_, {{"transmitter", "input_tensor"}});
+        add_flow(holoviz_native_postprocessor_, visualizer_, {{"output_tensors", "receivers"}, {"output_input_specs", "input_specs"}});
         add_flow(visualizer_, output_op, {{"render_buffer_output", "in"}});
         
         std::cout << "Pipeline configured for headless mode with render buffer output" << std::endl;
     } else {
         std::cout << "Running with display window" << std::endl;
         
-        // Simplified HolovizOp configuration for testing - only show video stream
+        // Create HolovizOp with static tensor configuration
         visualizer_ = make_operator<holoscan::ops::HolovizOp>(
             "holoviz",
             holoscan::Arg("width", int64_t(1920)),
             holoscan::Arg("height", int64_t(1080)),
             holoscan::Arg("enable_render_buffer_input", false),
             holoscan::Arg("enable_render_buffer_output", false),
+            holoscan::Arg("tensors", static_tensor_config_),  // Use our static configuration
             holoscan::Arg("allocator", host_memory_pool_),
             holoscan::Arg("cuda_stream_pool", cuda_stream_pool_)
         );
-        std::cout << "[MEM] Display HolovizOp created" << std::endl;
+        std::cout << "[MEM] Display HolovizOp created with static tensor configuration" << std::endl;
         
         std::cout << "[MEM] Connecting pipeline (display mode)..." << std::endl;
-        // Connect the pipeline with normal visualization (matching Python version)
+        // Connect the pipeline with NEW HolovizOp-native postprocessor
         add_flow(replayer_, visualizer_, {{"output", "receivers"}});                // Video stream directly to visualizer
         add_flow(replayer_, format_converter_, {{"output", "source_video"}});       // Video stream to preprocessor
         add_flow(format_converter_, inference_, {{"tensor", "receivers"}});         // Preprocessed tensor to inference
-        add_flow(inference_, yolo_postprocessor, {{"transmitter", "in"}});          // Inference results to postprocessor
-        add_flow(yolo_postprocessor, visualizer_, {{"out", "receivers"}, {"output_specs", "input_specs"}}); // Postprocessor results to visualizer
+        add_flow(inference_, holoviz_native_postprocessor_, {{"transmitter", "input_tensor"}});  // Inference results to NEW postprocessor
+        add_flow(holoviz_native_postprocessor_, visualizer_, {{"output_tensors", "receivers"}, {"output_input_specs", "input_specs"}}); // NEW postprocessor results to visualizer
+        
+        // Optional: Connect legacy postprocessor for comparison
+        if (legacy_postprocessor_) {
+            add_flow(inference_, legacy_postprocessor_, {{"transmitter", "in"}});
+            std::cout << "[MEM] Legacy postprocessor connected for comparison" << std::endl;
+        }
     }
     
     std::cout << "[MEM] === UrologyApp::compose() completed successfully ===" << std::endl;
-    std::cout << "Pipeline setup completed successfully!" << std::endl;
+    std::cout << "Pipeline setup completed with NEW HolovizOp-native postprocessor!" << std::endl;
 }
 
 void UrologyApp::setup_recording_pipeline() {
